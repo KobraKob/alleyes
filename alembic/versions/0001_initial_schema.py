@@ -24,7 +24,7 @@ def upgrade() -> None:
 
     # Execute verbatim SQL
     conn = op.get_bind()
-    conn.exec_driver_sql(sql_content.replace("%%", "%"))
+    conn.exec_driver_sql(sql_content)
 
 def downgrade() -> None:
     raise RuntimeError("Downgrading initial schema is not supported in production.")
