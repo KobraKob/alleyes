@@ -24,6 +24,9 @@ class Settings(BaseSettings):
         alias="LEARNING_ROLE_URL",
     )
 
+    # Browser origins allowed to call the API; configure explicitly in deployment.
+    cors_origins: list[str] = Field(default_factory=list, alias="CORS_ORIGINS")
+
     # Operational modes
     dry_run: bool = Field(default=True, alias="DRY_RUN")
     live_sends: bool = Field(default=False, alias="LIVE_SENDS")
