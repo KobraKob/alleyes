@@ -1,0 +1,104 @@
+slug: gym
+version: 1
+name: "Fitness & Gym Vertical Pack"
+
+funnel_stages:
+  - key: lead
+    label: "New Lead"
+    ordinal: 1
+    reward_weight: 0.5
+    is_revenue_stage: false
+    expected_lag_days: 0
+  - key: trial_booked
+    label: "Trial Session Booked"
+    ordinal: 2
+    reward_weight: 1.0
+    is_revenue_stage: false
+    expected_lag_days: 2
+  - key: trial_attended
+    label: "Trial Attended"
+    ordinal: 3
+    reward_weight: 3.0
+    is_revenue_stage: false
+    expected_lag_days: 4
+  - key: member
+    label: "Paid Member"
+    ordinal: 4
+    reward_weight: 10.0
+    is_revenue_stage: true
+    expected_lag_days: 10
+  - key: active_90d
+    label: "Active Member (90 Days)"
+    ordinal: 5
+    reward_weight: 25.0
+    is_revenue_stage: false
+    expected_lag_days: 90
+
+decision_points:
+  - key: ad_hook
+    description: "Creative opening angle / visual hook for social ads"
+    algorithm: thompson_beta
+    reward_window_days: 14
+  - key: offer
+    description: "Primary incentive offered in marketing materials"
+    algorithm: thompson_beta
+    reward_window_days: 14
+  - key: audience
+    description: "Target demographic & interest profile"
+    algorithm: thompson_beta
+    reward_window_days: 14
+  - key: send_time
+    description: "Optimal messaging delivery time window"
+    algorithm: thompson_beta
+    reward_window_days: 7
+  - key: followup_script
+    description: "Conversational script variant for follow-up outreach"
+    algorithm: thompson_beta
+    reward_window_days: 7
+  - key: lead_first_reply
+    description: "Instant response persona and opening hook for fresh leads"
+    algorithm: thompson_beta
+    reward_window_days: 7
+
+channels:
+  - meta_ads
+  - google_gbp
+  - whatsapp
+  - email
+
+compliance:
+  banned_claim_patterns:
+    - '(?i)guaranteed\s+(results|weight\s*loss|abs)'
+    - '(?i)lose\s+\d+\s*(?:kg|lbs|kilos)\s+in\s+\d+\s*(?:days|weeks)'
+    - '(?i)(cure|heal|prevent)\s+(diabetes|hypertension|disease|cancer)'
+    - '(?i)100%\s+guaranteed'
+  quiet_hours:
+    start: "21:00"
+    end: "09:00"
+  whatsapp_requires_opt_in: true
+
+seed_priors:
+  "ad_hook:strength_focus":
+    mean: 0.15
+    strength: 10
+  "ad_hook:weight_loss":
+    mean: 0.12
+    strength: 10
+  "ad_hook:community_vibe":
+    mean: 0.18
+    strength: 10
+  "offer:free_trial_1d":
+    mean: 0.14
+    strength: 10
+  "offer:free_trial_7d":
+    mean: 0.22
+    strength: 10
+  "offer:flat_discount_20":
+    mean: 0.11
+    strength: 10
+  "lead_first_reply:friendly_coach":
+    mean: 0.25
+    strength: 10
+  "lead_first_reply:direct_scheduler":
+    mean: 0.28
+    strength: 10
