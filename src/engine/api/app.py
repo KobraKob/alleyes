@@ -1,16 +1,18 @@
 """FastAPI application entry point."""
 
+from uuid import UUID
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from starlette.middleware.base import RequestResponseEndpoint
 from starlette.requests import Request
-from uuid import UUID
+from starlette.responses import Response
 
 from src.engine.api.auth import verify_api_key
-from src.engine.db.session import admin_session
 from src.engine.config import get_settings
-
+from src.engine.db.session import admin_session
 from src.engine.api.routes import (
     actions,
     businesses,
@@ -41,13 +43,19 @@ app.add_middleware(
 
 
 PUBLIC_PREFIXES = (
-    "/health", "/docs", "/redoc", "/openapi.json",
-    "/v1/webhooks/", "/t/",
+    "/health",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+    "/v1/webhooks/",
+    "/t/",
 )
 
 
 @app.middleware("http")
-async def authenticate_api_requests(request: Request, call_next):
+async def authenticate_api_requests(
+    request: Request, call_next: RequestResponseEndpoint
+) -> Response:
     """Authenticate tenant API traffic and bind the API key to its tenant."""
     path = request.url.path
     if request.method == "OPTIONS" or any(path == p or path.startswith(p) for p in PUBLIC_PREFIXES):
@@ -58,12 +66,18 @@ async def authenticate_api_requests(request: Request, call_next):
     raw_key = request.headers.get("X-API-Key")
     requested_business = request.headers.get("X-Business-ID")
     if not raw_key or not requested_business:
-        return JSONResponse(status_code=401, content={"detail": "X-API-Key and X-Business-ID headers are required."})
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "X-API-Key and X-Business-ID headers are required."},
+        )
     try:
         requested_id = UUID(requested_business)
         with admin_session() as session:
             candidates = session.execute(
-                text("SELECT business_id, key_hash FROM api_keys WHERE key_prefix = :prefix AND revoked_at IS NULL"),
+                text(
+                    "SELECT business_id, key_hash FROM api_keys "
+                    "WHERE key_prefix = :prefix AND revoked_at IS NULL"
+                ),
                 {"prefix": raw_key[:8]},
             ).fetchall()
             authenticated_id = next(
@@ -71,12 +85,19 @@ async def authenticate_api_requests(request: Request, call_next):
                 None,
             )
     except Exception:
-        return JSONResponse(status_code=503, content={"detail": "Authentication service unavailable."})
+        return JSONResponse(
+            status_code=503, content={"detail": "Authentication service unavailable."}
+        )
 
     if authenticated_id is None:
-        return JSONResponse(status_code=401, content={"detail": "Invalid or revoked API key."})
+        return JSONResponse(
+            status_code=401, content={"detail": "Invalid or revoked API key."}
+        )
     if authenticated_id != requested_id:
-        return JSONResponse(status_code=403, content={"detail": "API key does not belong to this business."})
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "API key does not belong to this business."},
+        )
     request.state.business_id = authenticated_id
     return await call_next(request)
 
