@@ -42,14 +42,15 @@ app.add_middleware(
 )
 
 
-PUBLIC_PREFIXES = (
+PUBLIC_PATHS = {
     "/health",
+    "/ready",
     "/docs",
     "/redoc",
     "/openapi.json",
-    "/v1/webhooks/",
-    "/t/",
-)
+    "/v1/webhooks/whatsapp",
+}
+PUBLIC_PREFIXES = ("/t/",)
 
 
 @app.middleware("http")
@@ -58,7 +59,7 @@ async def authenticate_api_requests(
 ) -> Response:
     """Authenticate tenant API traffic and bind the API key to its tenant."""
     path = request.url.path
-    if request.method == "OPTIONS" or any(path == p or path.startswith(p) for p in PUBLIC_PREFIXES):
+    if request.method == "OPTIONS" or path in PUBLIC_PATHS or any(path.startswith(p) for p in PUBLIC_PREFIXES):
         return await call_next(request)
     if not path.startswith("/v1/"):
         return await call_next(request)
