@@ -1,37 +1,63 @@
 import React from "react";
+import Link from "next/link";
 import "./globals.css";
 
 export const metadata = {
-  title: "Autonomous Marketing Engine",
-  description: "Governance, Performance, Learning & Control",
+  title: "ALLEYES — Marketing Intelligence",
+  description: "Marketing operations, lead intelligence, governed automation and measurable growth.",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+const navigation = [
+  { href: "/approvals", index: "01", label: "Action desk", note: "Review & govern" },
+  { href: "/performance", index: "02", label: "Performance", note: "Commercial outcomes" },
+  { href: "/learning", index: "03", label: "Learning lab", note: "Test & understand" },
+  { href: "/control", index: "04", label: "System control", note: "Policies & audit" },
+];
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-gray-50 text-gray-900 font-sans min-h-screen">
-        <header className="bg-slate-900 text-white shadow">
-          <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <span className="h-3 w-3 rounded-full bg-emerald-400 animate-pulse"></span>
-              <h1 className="text-xl font-bold tracking-tight">Autonomous Marketing Engine</h1>
-              <span className="text-xs bg-slate-800 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/30">v1.0 (Gym)</span>
+      <body>
+        <div className="app-shell">
+          <aside className="sidebar">
+            <Link href="/approvals" className="brand-lockup" aria-label="ALLEYES home">
+              <span className="brand-mark" aria-hidden="true"><span /><span /><span /></span>
+              <span className="brand-word">ALL<span>EYES</span><small>MARKETING INTELLIGENCE</small></span>
+            </Link>
+            <div className="workspace-switcher">
+              <span className="workspace-avatar">IF</span>
+              <span className="workspace-copy"><strong>Iron Fitness</strong><small>Demo workspace · Gym</small></span>
+              <span className="switcher-chevron">⌄</span>
             </div>
-            <nav className="flex space-x-6 text-sm font-medium">
-              <a href="/approvals" className="hover:text-emerald-400 transition-colors">1. Approval Queue</a>
-              <a href="/performance" className="hover:text-emerald-400 transition-colors">2. Performance</a>
-              <a href="/learning" className="hover:text-emerald-400 transition-colors">3. Learning</a>
-              <a href="/control" className="hover:text-emerald-400 transition-colors">4. Control</a>
+            <div className="nav-label">WORKSPACE</div>
+            <nav className="main-nav" aria-label="Main navigation">
+              {navigation.map((item) => (
+                <Link href={item.href} key={item.href} className="nav-item">
+                  <span className="nav-index">{item.index}</span>
+                  <span className="nav-copy"><strong>{item.label}</strong><small>{item.note}</small></span>
+                  <span className="nav-arrow">↗</span>
+                </Link>
+              ))}
             </nav>
-          </div>
-        </header>
-        <main className="max-w-7xl mx-auto px-4 py-8">
-          {children}
-        </main>
+            <div className="sidebar-bottom">
+              <div className="environment-card">
+                <div className="environment-heading"><span className="status-dot" /> SAFE ENVIRONMENT</div>
+                <strong>Dry-run enabled</strong>
+                <p>Actions are simulated. No messages sent and no ad spend changed.</p>
+                <div className="environment-rule"><span>LIVE SENDS</span><b>DISABLED</b></div>
+              </div>
+              <div className="sidebar-footer"><span>ALLEYES / 01</span><span>BUILD PREVIEW</span></div>
+            </div>
+          </aside>
+          <main className="main-area">
+            <header className="topbar">
+              <div className="breadcrumb"><span>WORKSPACE</span><span className="crumb-slash">/</span><strong>MARKETING OPERATIONS</strong></div>
+              <div className="topbar-right"><span className="demo-tag"><i /> DEMONSTRATION DATA</span><span className="topbar-divider" /><span className="user-avatar">K</span></div>
+            </header>
+            <div className="page-content">{children}</div>
+            <footer className="page-footer"><span>ALLEYES INTELLIGENCE PLATFORM</span><span>DEMO DATA · NOT CONNECTED TO LIVE ACCOUNTS</span></footer>
+          </main>
+        </div>
       </body>
     </html>
   );
