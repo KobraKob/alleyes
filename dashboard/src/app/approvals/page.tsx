@@ -1,118 +1,33 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
+
+type DemoAction = { id: string; kind: string; channel: string; risk: number; reasoning: string; content: string; proposed: string; checks: string[]; status: "pending" | "approved" | "rejected" };
+const initialActions: DemoAction[] = [
+  { id: "ACT-DEMO-014", kind: "Lead response", channel: "WhatsApp", risk: 1, reasoning: "A new enquiry asked about trial availability at the Indiranagar branch. Proposed reply uses the configured trial offer and routes unknown questions to staff.", content: "Hi there — thanks for reaching out to Iron Fitness. We can help you book a trial at our Indiranagar branch. What day and time works best for you?", proposed: "09:18:42 IST · 2 min ago", checks: ["Consent", "Quiet hours", "Claims", "Kill switch"], status: "pending" },
+  { id: "ACT-DEMO-013", kind: "Campaign draft", channel: "Meta Ads", risk: 2, reasoning: "Test a schedule-led creative against the current strength-training hook. Draft remains paused pending human review.", content: "Creative hypothesis: branch-specific class schedules may improve qualified trial bookings. No campaign will be created or activated in this preview.", proposed: "09:12:05 IST · 8 min ago", checks: ["Budget envelope", "Claims", "Branch radius"], status: "pending" },
+];
 
 export default function ApprovalsPage() {
-  const [actions, setActions] = useState([
-    {
-      id: "act_sample_01",
-      kind: "send_message",
-      channel: "whatsapp",
-      risk_tier: 1,
-      reasoning: "Immediate qualification reply offering 7-day trial to Indiranagar walk-in lead.",
-      payload: {
-        to: "+919876543210",
-        content: "Hey there! We would love to offer you a free 7-day workout pass at our Indiranagar gym.",
-      },
-      policy_results: {
-        kill_switch: { passed: true },
-        consent: { passed: true },
-        quiet_hours: { passed: true },
-        claims_check: { passed: true },
-        whatsapp_window: { passed: true }
-      },
-      proposed_at: "2026-10-14 22:30 UTC"
-    }
-  ]);
-
-  const [message, setMessage] = useState("");
-
-  const handleApprove = (id: string) => {
-    setActions(actions.filter(a => a.id !== id));
-    setMessage(`Action ${id} approved and dispatched.`);
+  const [actions, setActions] = useState(initialActions);
+  const [filter, setFilter] = useState<"all" | "pending" | "resolved">("all");
+  const [notice, setNotice] = useState("");
+  const updateAction = (id:string,status:"approved"|"rejected") => {
+    setActions(current => current.map(a => a.id === id ? {...a,status} : a));
+    setNotice(status === "approved" ? "Demo approval recorded locally. No connector was called and no message was sent." : "Demo rejection recorded locally. No backend record was changed.");
   };
-
-  const handleReject = (id: string) => {
-    setActions(actions.filter(a => a.id !== id));
-    setMessage(`Action ${id} rejected.`);
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">1. Approval Queue (L1 / L2 Actions)</h2>
-          <p className="text-sm text-gray-500">Autonomous actions requiring explicit human confirmation before execution.</p>
-        </div>
-        <span className="bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-1 rounded-full">
-          {actions.length} Pending Actions
-        </span>
-      </div>
-
-      {message && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded text-sm">
-          {message}
-        </div>
-      )}
-
-      {actions.length === 0 ? (
-        <div className="bg-white border rounded-lg p-12 text-center text-gray-500">
-          No actions currently awaiting approval. System operating smoothly within autonomous bounds.
-        </div>
-      ) : (
-        <div className="grid gap-4">
-          {actions.map((act) => (
-            <div key={act.id} className="bg-white border rounded-lg p-6 shadow-sm space-y-4">
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <span className="font-semibold text-lg">{act.kind}</span>
-                    <span className="text-xs bg-slate-100 px-2 py-0.5 rounded font-mono uppercase">{act.channel}</span>
-                    <span className="text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded font-semibold">Tier {act.risk_tier}</span>
-                  </div>
-                  <p className="text-sm text-gray-600 mt-1">Proposed at: {act.proposed_at}</p>
-                </div>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => handleApprove(act.id)}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-sm font-medium transition"
-                  >
-                    Approve & Send
-                  </button>
-                  <button
-                    onClick={() => handleReject(act.id)}
-                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded text-sm font-medium transition"
-                  >
-                    Reject
-                  </button>
-                </div>
-              </div>
-
-              <div className="bg-slate-50 p-4 rounded text-sm border font-mono">
-                <span className="font-semibold text-gray-700 block mb-1">Payload Content:</span>
-                {act.payload.content}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 text-xs">
-                <div>
-                  <span className="font-semibold text-gray-700 block">Agent Reasoning:</span>
-                  <p className="text-gray-600 mt-0.5">{act.reasoning}</p>
-                </div>
-                <div>
-                  <span className="font-semibold text-gray-700 block">Policy Guardrail Checks:</span>
-                  <div className="flex space-x-2 mt-1">
-                    {Object.entries(act.policy_results).map(([check, res]: any) => (
-                      <span key={check} className="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded text-[10px]">
-                        ✓ {check}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  const visible = actions.filter(a => filter === "all" || (filter === "pending" ? a.status === "pending" : a.status !== "pending"));
+  const pending = actions.filter(a=>a.status==="pending").length;
+  return <div>
+    <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-mark" /> GOVERNANCE / 01</div><h1>Action desk</h1><p>Inspect what automation wants to do, why it wants to do it, and whether policy allows the action.</p></div><div className="heading-meta"><span className="status-pill warn">{pending} awaiting review</span></div></div>
+    <div className="demo-notice"><span className="notice-icon">!</span><span><strong>Preview mode — no live execution.</strong> The items below are seeded examples. Approve and reject controls change this screen only; production approval must call the governed API and record the resulting audit event.</span></div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:14,flexWrap:"wrap"}}><div className="heading-meta"><span className="panel-kicker">ACTION QUEUE</span><span style={{color:"#c1c7bf"}}>/</span><span>{actions.length} sample actions</span></div><div style={{display:"flex",gap:5}}>{(["all","pending","resolved"] as const).map(key=><button key={key} className="btn" onClick={()=>setFilter(key)} style={filter===key?{background:"#17211e",borderColor:"#17211e",color:"#fff"}:{}}>{key==="all"?"All actions":key==="pending"?"Pending":"Resolved"}</button>)}</div></div>
+    {notice && <div className="demo-notice"><span className="notice-icon">i</span><span>{notice}</span><button className="panel-action" style={{marginLeft:"auto",flexShrink:0}} onClick={()=>setNotice("")}>Dismiss</button></div>}
+    {visible.length===0?<section className="panel"><div className="empty-state"><strong>No actions in this view</strong>Try another filter or return when the queue contains new work.</div></section>:visible.map(act=><article className="action-card" key={act.id}>
+      <div className="action-top"><div className="action-identity"><div className="channel-icon">{act.channel==="WhatsApp"?"W":"M"}</div><div><h2 className="action-title">{act.kind}</h2><div className="action-meta"><span className="action-id">{act.id}</span><span>·</span><span>{act.channel}</span><span>·</span><span className="status-pill warn">Risk tier {act.risk}</span><span className="status-pill neutral">{act.status==="pending"?"Pending review":act.status}</span></div></div></div>
+      {act.status==="pending"?<div className="action-buttons"><button className="btn btn-primary" onClick={()=>updateAction(act.id,"approved")}>Simulate approval</button><button className="btn btn-danger" onClick={()=>updateAction(act.id,"rejected")}>Reject demo</button></div>:<div className="action-buttons"><span className="status-pill neutral">Resolved locally</span></div>}</div>
+      <div className="action-content"><div><div className="field-label">Proposed payload · preview</div><div className="message-preview">{act.content}</div><div style={{marginTop:10,color:"#8a938b",fontSize:9}}>Proposed {act.proposed}</div></div><div><div className="field-label">Agent rationale</div><p className="reason-text">{act.reasoning}</p><div className="field-label" style={{marginTop:16}}>Policy pre-checks · illustrative</div><div className="checks">{act.checks.map(check=><span className="check-chip" key={check}>✓ {check}</span>)}<span className="check-chip pending">! Not API-verified</span></div></div></div>
+    </article>)}
+    <div className="panel" style={{marginTop:18}}><div className="panel-header"><div><h2 className="panel-title">Review standard</h2><p className="panel-subtitle">What a real approval record must include</p></div><span className="panel-kicker">GOVERNANCE CONTRACT</span></div><div className="panel-body" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:18}}>{[{n:"01",t:"Policy evidence",d:"Persist each guardrail result and rejection reason."},{n:"02",t:"Human intent",d:"Record reviewer, decision, edits and timestamp."},{n:"03",t:"Executor outcome",d:"Show connector response, retries and external reference."},{n:"04",t:"Idempotency",d:"Repeated clicks must never duplicate a side effect."}].map(x=><div key={x.n}><div className="panel-kicker">{x.n}</div><strong style={{display:"block",marginTop:8,fontSize:11}}>{x.t}</strong><p style={{margin:"6px 0 0",color:"#7b857d",fontSize:10,lineHeight:1.6}}>{x.d}</p></div>)}</div></div>
+  </div>;
 }
