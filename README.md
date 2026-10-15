@@ -128,6 +128,25 @@ make migrate
 # Or: alembic upgrade head
 ```
 
+### API authentication and tenant keys
+
+All private `/v1/*` API routes require both `X-API-Key` and `X-Business-ID`.
+The key is bound to exactly one business; a key cannot select another tenant.
+Public exceptions are health/readiness probes, the verified WhatsApp webhook,
+and public tracking redirects. Configure `CORS_ORIGINS` as a JSON array of
+trusted dashboard origins. Do not use wildcard origins in production.
+
+After creating a business and applying migrations, provision a key from a
+trusted server environment:
+
+```bash
+python -m scripts.create_api_key --business-id <BUSINESS_UUID> --name production-dashboard
+```
+
+Copy the printed key directly into your secret manager. It is shown once.
+Never commit API keys, database credentials, or production encryption keys.
+Use `GET /health` for liveness and `GET /ready` for database readiness.
+
 ### 6. Seed the Demo Environment (Gym Vertical)
 Seeds an organization, sample fitness business ("Iron Fitness Gym"), 3 locations (Indiranagar, Koramangala, HSR Layout), decision points, bandit arms, and default API keys:
 ```bash
