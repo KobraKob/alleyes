@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -74,6 +74,10 @@ async def authenticate_api_requests(
         )
     try:
         requested_id = UUID(requested_business)
+    except ValueError:
+        return JSONResponse(status_code=400, content={"detail": "X-Business-ID must be a UUID."})
+
+    try:
         with admin_session() as session:
             candidates = session.execute(
                 text(
@@ -117,4 +121,16 @@ app.include_router(reports.router)
 
 @app.get("/health")
 def health_check() -> dict[str, str]:
-    return {"status": "healthy", "engine": "autonomous-marketing-engine"}
+    """Liveness probe. Does not require database availability."""
+    return {"status": "healthy", "engine": "alleeyes"}
+
+
+@app.get("/ready")
+def readiness_check() -> dict[str, str]:
+    """Readiness probe verifies database connectivity and schema access."""
+    try:
+        with admin_session() as session:
+            session.execute(text("SELECT 1"))
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Database unavailable.") from exc
+    return {"status": "ready", "database": "reachable"}
