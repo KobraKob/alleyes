@@ -11,8 +11,6 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from src.engine.api.auth import verify_api_key
-from src.engine.config import get_settings
-from src.engine.db.session import admin_session
 from src.engine.api.routes import (
     actions,
     businesses,
