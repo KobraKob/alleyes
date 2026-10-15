@@ -1,6 +1,6 @@
-# Autonomous Marketing Engine (v1)
+# ALLEYES — Marketing Intelligence Platform
 
-An autonomous, multi-tenant marketing engine featuring Bayesian Thompson Sampling bandits, deterministic multi-touch attribution, strict regulatory governance (India DPDP Act 2023, TRAI quiet hours, WhatsApp 24-hour messaging window), a 5-agent LLM orchestration system, and Next.js management dashboard.
+ALLEYES is an autonomous, multi-tenant marketing engine featuring Bayesian Thompson Sampling bandits, deterministic multi-touch attribution, strict regulatory governance (India DPDP Act 2023, TRAI quiet hours, WhatsApp 24-hour messaging window), a 5-agent LLM orchestration system, and Next.js management dashboard.
 
 ---
 
