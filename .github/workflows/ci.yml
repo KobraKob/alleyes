@@ -54,7 +54,21 @@ jobs:
           PII_ENCRYPTION_KEY: vS8zC8rVl71Dk6fQWk3Xz9J2gN7tVb6uY4eO1pP8lDs=
           TENANT_HMAC_MASTER_KEY: kL9mB7xP2wQ4vC8nZ1tY6rJ3gH5eD0fA=
         run: |
+          alembic upgrade head
           python scripts/seed.py
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Build dashboard
+        working-directory: dashboard
+        run: |
+          npm ci
+          npm run build
 
       - name: Run Test Suite
         env:
