@@ -1,0 +1,52 @@
+slug: local_services
+version: 1
+name: "Local & Professional Services"
+funnel_stages:
+  - key: inquiry
+    label: "New Inquiry"
+    ordinal: 1
+    reward_weight: 0.5
+    is_revenue_stage: false
+    expected_lag_days: 0
+  - key: qualified
+    label: "Qualified Opportunity"
+    ordinal: 2
+    reward_weight: 2.0
+    is_revenue_stage: false
+    expected_lag_days: 1
+  - key: appointment_booked
+    label: "Appointment Booked"
+    ordinal: 3
+    reward_weight: 4.0
+    is_revenue_stage: false
+    expected_lag_days: 2
+  - key: job_completed
+    label: "Service Completed"
+    ordinal: 4
+    reward_weight: 10.0
+    is_revenue_stage: true
+    expected_lag_days: 7
+  - key: repeat_customer
+    label: "Repeat Customer"
+    ordinal: 5
+    reward_weight: 15.0
+    is_revenue_stage: true
+    expected_lag_days: 30
+decision_points:
+  - key: offer
+    description: "Service offer and booking incentive"
+    algorithm: thompson_beta
+    reward_window_days: 14
+  - key: lead_response
+    description: "First response and follow-up sequence"
+    algorithm: thompson_beta
+    reward_window_days: 7
+  - key: channel
+    description: "Acquisition and customer communication channel"
+    algorithm: thompson_beta
+    reward_window_days: 14
+channels: [google_gbp, google_ads, meta_ads, email, whatsapp, phone]
+compliance:
+  whatsapp_requires_opt_in: true
+  respect_local_contacting_rules: true
+seed_priors: {}
