@@ -48,7 +48,7 @@ const emptyData: OverviewData = {
 
 const number = (value: number) => new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(value);
 const spendLabel = (campaigns: CampaignReport[], currency: string) =>
-  formatCurrencyMinor(campaigns.reduce((total, row) => total + row.spend_minor, 0), currency);
+  campaigns.length === 0 ? "No data" : formatCurrencyMinor(campaigns.reduce((total, row) => total + row.spend_minor, 0), currency);
 
 export default function DashboardPage() {
   const { connectionState, request, business: connectedBusiness } = useWorkspace();
