@@ -22,7 +22,7 @@ export default function ControlPage() {
   const [lastCommandAt, setLastCommandAt] = useState<string | null>(null);
 
   const runProbes = useCallback(async () => {
-    if (!connection || !business) return;
+    if (!connection || !business?.id) return;
     setProbeLoading(true);
     setProbeError("");
     const outcomes = await Promise.allSettled([
