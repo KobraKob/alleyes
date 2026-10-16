@@ -32,7 +32,7 @@ export default function ApprovalsPage() {
   const [busyId, setBusyId] = useState("");
 
   const refresh = useCallback(async () => {
-    if (!connection || !business) return;
+    if (!connection || !business?.id) return;
     setLoading(true);
     setError("");
     try {
