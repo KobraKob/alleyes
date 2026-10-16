@@ -1,4 +1,4 @@
-"""FastAPI application entry point."""
+""""FastAPI application entry point."""
 
 from uuid import UUID
 
@@ -18,6 +18,7 @@ from src.engine.api.routes import (
     frontdesk,
     kill_switch,
     leads,
+    packs,
     reports,
     tracking,
 )
@@ -32,7 +33,6 @@ app = FastAPI(
     description="Multi-tenant, event-sourced, bandit-optimized autonomous marketing platform.",
 )
 
-# Enable CORS for Next.js dashboard
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -40,7 +40,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 PUBLIC_PATHS = {
     "/health",
@@ -120,6 +119,7 @@ app.include_router(actions.router)
 app.include_router(kill_switch.router)
 app.include_router(businesses.router)
 app.include_router(reports.router)
+app.include_router(packs.router)
 
 
 @app.get("/health")
