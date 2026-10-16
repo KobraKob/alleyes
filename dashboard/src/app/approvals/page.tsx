@@ -46,7 +46,7 @@ export default function ApprovalsPage() {
   }, [connection, business?.id]);
 
   useEffect(() => {
-    if (!connection || !business) return;
+    if (!connection || !business?.id) return;
     void refresh();
     const timer = window.setInterval(() => { void refresh(); }, 30_000);
     return () => window.clearInterval(timer);
