@@ -1,0 +1,52 @@
+slug: real_estate
+version: 1
+name: "Real Estate & Property"
+funnel_stages:
+  - key: inquiry
+    label: "Property Inquiry"
+    ordinal: 1
+    reward_weight: 0.5
+    is_revenue_stage: false
+    expected_lag_days: 0
+  - key: qualified_lead
+    label: "Qualified Lead"
+    ordinal: 2
+    reward_weight: 2.0
+    is_revenue_stage: false
+    expected_lag_days: 2
+  - key: site_visit
+    label: "Site Visit"
+    ordinal: 3
+    reward_weight: 5.0
+    is_revenue_stage: false
+    expected_lag_days: 7
+  - key: booking
+    label: "Booking"
+    ordinal: 4
+    reward_weight: 15.0
+    is_revenue_stage: true
+    expected_lag_days: 30
+  - key: closed
+    label: "Closed Deal"
+    ordinal: 5
+    reward_weight: 30.0
+    is_revenue_stage: true
+    expected_lag_days: 60
+decision_points:
+  - key: property_match
+    description: "Property and buyer-intent match"
+    algorithm: thompson_beta
+    reward_window_days: 30
+  - key: followup
+    description: "Lead follow-up timing and message"
+    algorithm: thompson_beta
+    reward_window_days: 14
+  - key: channel
+    description: "Channel used to reach qualified prospects"
+    algorithm: thompson_beta
+    reward_window_days: 30
+channels: [meta_ads, google_ads, email, whatsapp, phone]
+compliance:
+  whatsapp_requires_opt_in: true
+  require_verified_listing_claims: true
+seed_priors: {}
