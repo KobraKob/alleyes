@@ -22,9 +22,11 @@ def upgrade() -> None:
     with open(schema_path, "r", encoding="utf-8") as f:
         sql_content = f.read()
 
-    # Execute verbatim SQL
+    # psycopg's client-side placeholder parser treats PostgreSQL format() specifiers
+    # (for example %I) as parameters. Escape percent signs so this multi-statement
+    # schema script reaches PostgreSQL unchanged.
     conn = op.get_bind()
-    conn.exec_driver_sql(sql_content)
+    conn.exec_driver_sql(sql_content.replace("%", "%%"))
 
 def downgrade() -> None:
     raise RuntimeError("Downgrading initial schema is not supported in production.")
