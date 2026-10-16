@@ -1,33 +1,172 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { apiFetch, formatDate, humanizeKey } from "@/lib/api";
+import { useWorkspace } from "@/lib/use-workspace";
+import { ConnectPrompt, EmptyState, ErrorNotice, LoadingState, PageHeading, PanelHeading, SectionHeading, Surface } from "@/components/primitives";
 
-type DemoAction = { id: string; kind: string; channel: string; risk: number; reasoning: string; content: string; proposed: string; checks: string[]; status: "pending" | "approved" | "rejected" };
-const initialActions: DemoAction[] = [
-  { id: "ACT-DEMO-014", kind: "Lead response", channel: "WhatsApp", risk: 1, reasoning: "A new enquiry asked about trial availability at the Indiranagar branch. Proposed reply uses the configured trial offer and routes unknown questions to staff.", content: "Hi there — thanks for reaching out to Iron Fitness. We can help you book a trial at our Indiranagar branch. What day and time works best for you?", proposed: "09:18:42 IST · 2 min ago", checks: ["Consent", "Quiet hours", "Claims", "Kill switch"], status: "pending" },
-  { id: "ACT-DEMO-013", kind: "Campaign draft", channel: "Meta Ads", risk: 2, reasoning: "Test a schedule-led creative against the current strength-training hook. Draft remains paused pending human review.", content: "Creative hypothesis: branch-specific class schedules may improve qualified trial bookings. No campaign will be created or activated in this preview.", proposed: "09:12:05 IST · 8 min ago", checks: ["Budget envelope", "Claims", "Branch radius"], status: "pending" },
-];
+type ProposedAction = {
+  id: string;
+  kind: string;
+  payload: Record<string, unknown>;
+  risk_tier: number;
+  reasoning: string | null;
+  policy_results: Record<string, unknown>;
+  proposed_at: string | null;
+};
+
+type QueueFilter = "all" | "high-risk";
+
+function readablePayload(payload: Record<string, unknown>): string {
+  return JSON.stringify(payload, null, 2) ?? "{}";
+}
 
 export default function ApprovalsPage() {
-  const [actions, setActions] = useState(initialActions);
-  const [filter, setFilter] = useState<"all" | "pending" | "resolved">("all");
+  const { connection, business, checking, connectionError, reload } = useWorkspace();
+  const [actions, setActions] = useState<ProposedAction[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const updateAction = (id:string,status:"approved"|"rejected") => {
-    setActions(current => current.map(a => a.id === id ? {...a,status} : a));
-    setNotice(status === "approved" ? "Demo approval recorded locally. No connector was called and no message was sent." : "Demo rejection recorded locally. No backend record was changed.");
+  const [filter, setFilter] = useState<QueueFilter>("all");
+  const [query, setQuery] = useState("");
+  const [busyId, setBusyId] = useState("");
+
+  const refresh = useCallback(async () => {
+    if (!connection || !business?.id) return;
+    setLoading(true);
+    setError("");
+    try {
+      const rows = await apiFetch<ProposedAction[]>("/v1/actions?status=proposed", {}, connection);
+      setActions(Array.isArray(rows) ? rows : []);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Action queue could not be loaded.");
+    } finally {
+      setLoading(false);
+    }
+  }, [connection, business?.id]);
+
+  useEffect(() => {
+    if (!connection || !business?.id) return;
+    void refresh();
+    const timer = window.setInterval(() => { void refresh(); }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [connection, business?.id, refresh]);
+
+  const visible = useMemo(() => (actions ?? []).filter((action) => {
+    const matchesRisk = filter === "all" || action.risk_tier >= 2;
+    const searchText = `${action.kind} ${action.id} ${JSON.stringify(action.payload)} ${action.reasoning ?? ""}`.toLowerCase();
+    return matchesRisk && searchText.includes(query.toLowerCase().trim());
+  }), [actions, filter, query]);
+
+  const decide = async (action: ProposedAction, decision: "approve" | "reject") => {
+    if (!connection?.reviewerId) {
+      setNotice("Add a reviewer user ID in Workspace settings before making an approval decision.");
+      return;
+    }
+    const effect = decision === "approve"
+      ? "Approval may execute this action through configured connectors. Continue only after checking the payload and backend safety mode."
+      : "Reject this proposed action and record the decision in the backend.";
+    if (!window.confirm(effect)) return;
+
+    setBusyId(action.id);
+    setError("");
+    setNotice("");
+    try {
+      await apiFetch<{ status?: string }>(
+        `/v1/actions/${encodeURIComponent(action.id)}/${decision}`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            user_id: connection.reviewerId,
+            comment: decision === "approve" ? "Approved from ALLEYES action desk." : "Rejected from ALLEYES action desk.",
+          }),
+        },
+        connection,
+      );
+      setNotice(decision === "approve" ? "Approval accepted by the API. Check the returned backend/executor logs for the final outcome." : "Rejection recorded by the API.");
+      await refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The decision was not accepted by the API.");
+    } finally {
+      setBusyId("");
+    }
   };
-  const visible = actions.filter(a => filter === "all" || (filter === "pending" ? a.status === "pending" : a.status !== "pending"));
-  const pending = actions.filter(a=>a.status==="pending").length;
-  return <div>
-    <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-mark" /> GOVERNANCE / 01</div><h1>Action desk</h1><p>Inspect what automation wants to do, why it wants to do it, and whether policy allows the action.</p></div><div className="heading-meta"><span className="status-pill warn">{pending} awaiting review</span></div></div>
-    <div className="demo-notice"><span className="notice-icon">!</span><span><strong>Preview mode — no live execution.</strong> The items below are seeded examples. Approve and reject controls change this screen only; production approval must call the governed API and record the resulting audit event.</span></div>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:14,flexWrap:"wrap"}}><div className="heading-meta"><span className="panel-kicker">ACTION QUEUE</span><span style={{color:"#c1c7bf"}}>/</span><span>{actions.length} sample actions</span></div><div style={{display:"flex",gap:5}}>{(["all","pending","resolved"] as const).map(key=><button key={key} className="btn" onClick={()=>setFilter(key)} style={filter===key?{background:"#17211e",borderColor:"#17211e",color:"#fff"}:{}}>{key==="all"?"All actions":key==="pending"?"Pending":"Resolved"}</button>)}</div></div>
-    {notice && <div className="demo-notice"><span className="notice-icon">i</span><span>{notice}</span><button className="panel-action" style={{marginLeft:"auto",flexShrink:0}} onClick={()=>setNotice("")}>Dismiss</button></div>}
-    {visible.length===0?<section className="panel"><div className="empty-state"><strong>No actions in this view</strong>Try another filter or return when the queue contains new work.</div></section>:visible.map(act=><article className="action-card" key={act.id}>
-      <div className="action-top"><div className="action-identity"><div className="channel-icon">{act.channel==="WhatsApp"?"W":"M"}</div><div><h2 className="action-title">{act.kind}</h2><div className="action-meta"><span className="action-id">{act.id}</span><span>·</span><span>{act.channel}</span><span>·</span><span className="status-pill warn">Risk tier {act.risk}</span><span className="status-pill neutral">{act.status==="pending"?"Pending review":act.status}</span></div></div></div>
-      {act.status==="pending"?<div className="action-buttons"><button className="btn btn-primary" onClick={()=>updateAction(act.id,"approved")}>Simulate approval</button><button className="btn btn-danger" onClick={()=>updateAction(act.id,"rejected")}>Reject demo</button></div>:<div className="action-buttons"><span className="status-pill neutral">Resolved locally</span></div>}</div>
-      <div className="action-content"><div><div className="field-label">Proposed payload · preview</div><div className="message-preview">{act.content}</div><div style={{marginTop:10,color:"#8a938b",fontSize:9}}>Proposed {act.proposed}</div></div><div><div className="field-label">Agent rationale</div><p className="reason-text">{act.reasoning}</p><div className="field-label" style={{marginTop:16}}>Policy pre-checks · illustrative</div><div className="checks">{act.checks.map(check=><span className="check-chip" key={check}>✓ {check}</span>)}<span className="check-chip pending">! Not API-verified</span></div></div></div>
-    </article>)}
-    <div className="panel" style={{marginTop:18}}><div className="panel-header"><div><h2 className="panel-title">Review standard</h2><p className="panel-subtitle">What a real approval record must include</p></div><span className="panel-kicker">GOVERNANCE CONTRACT</span></div><div className="panel-body" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:18}}>{[{n:"01",t:"Policy evidence",d:"Persist each guardrail result and rejection reason."},{n:"02",t:"Human intent",d:"Record reviewer, decision, edits and timestamp."},{n:"03",t:"Executor outcome",d:"Show connector response, retries and external reference."},{n:"04",t:"Idempotency",d:"Repeated clicks must never duplicate a side effect."}].map(x=><div key={x.n}><div className="panel-kicker">{x.n}</div><strong style={{display:"block",marginTop:8,fontSize:11}}>{x.t}</strong><p style={{margin:"6px 0 0",color:"#7b857d",fontSize:10,lineHeight:1.6}}>{x.d}</p></div>)}</div></div>
-  </div>;
+
+  if (checking) return <LoadingState label="Checking workspace connection" />;
+  if (!connection) return <ConnectPrompt />;
+  if (!business) return <><ErrorNotice message={connectionError || "Workspace connection could not be verified."} onRetry={() => { void reload(); }} /><ConnectPrompt /></>;
+
+  return (
+    <div className="page">
+      <PageHeading
+        eyebrow="GOVERNANCE / ACTION DESK"
+        title="Human review. Real consequences."
+        description="Inspect the exact payload and policy evidence before recording a decision. Approval calls the backend executor; it is not a local preview."
+        actions={<button className="button button-primary" onClick={() => void refresh()} disabled={loading}>{loading ? "Refreshing…" : "↻ Refresh queue"}</button>}
+      />
+
+      {!connection.reviewerId ? <div className="notice notice-error"><span className="notice-symbol">!</span><div className="notice-copy"><strong>Reviewer identity required.</strong><p>Approval and rejection endpoints require a reviewer UUID. Add it in Workspace settings before making decisions.</p></div><button className="button button-quiet" onClick={() => window.dispatchEvent(new Event("alleeyes:open-connection"))}>Workspace settings ↗</button></div> : null}
+      {notice ? <div className="notice"><span className="notice-symbol">✓</span><div className="notice-copy"><strong>API response</strong><p>{notice}</p></div><button className="button button-quiet" onClick={() => setNotice("")}>Dismiss</button></div> : null}
+      {error ? <ErrorNotice message={error} onRetry={() => { void refresh(); }} /> : null}
+
+      <div className="queue-toolbar">
+        <div className="queue-title"><span className="queue-live-dot" /><div><strong>Proposed actions</strong><small>{actions === null ? "Awaiting API response" : `${actions.length} pending approval records`}</small></div></div>
+        <div className="queue-tools">
+          <input aria-label="Search actions" className="search-input" value={query} onChange={(event) => setQuery(event.target.value)} />
+          <div className="segmented-control" aria-label="Risk filter">
+            <button className={filter === "all" ? "selected" : ""} onClick={() => setFilter("all")}>All risk</button>
+            <button className={filter === "high-risk" ? "selected" : ""} onClick={() => setFilter("high-risk")}>Tier 2+</button>
+          </div>
+        </div>
+      </div>
+
+      {loading && actions === null ? <LoadingState label="Loading proposed actions from API" /> : null}
+      {!loading && actions === null && !error ? <Surface><EmptyState title="Queue not loaded" detail="Refresh the queue to request proposed actions from this business workspace." action={<button className="button button-quiet" onClick={() => void refresh()}>Load queue</button>} /></Surface> : null}
+      {actions?.length === 0 ? <Surface><EmptyState title="No proposed actions" detail="The API returned an empty approval queue. New proposed actions will appear here once agents create them." /></Surface> : null}
+      {actions && actions.length > 0 && visible.length === 0 ? <Surface><EmptyState title="No matching actions" detail="Change the risk filter or search text to see more records." /></Surface> : null}
+
+      {visible.length > 0 ? <div className="action-list">
+        {visible.map((action) => {
+          const policyItems = Object.entries(action.policy_results ?? {});
+          return <article className="action-card" key={action.id}>
+            <div className="action-top">
+              <div className="action-identity">
+                <div className="action-symbol" aria-hidden="true">↳</div>
+                <div>
+                  <h2>{humanizeKey(action.kind)}</h2>
+                  <div className="action-meta"><span>{action.id}</span><span>·</span><span>Risk tier {action.risk_tier}</span><span>·</span><span>{formatDate(action.proposed_at)}</span></div>
+                </div>
+              </div>
+              <div className="button-row">
+                <button className="button button-danger" onClick={() => void decide(action, "reject")} disabled={Boolean(busyId) || !connection.reviewerId}>{busyId === action.id ? "Submitting…" : "Reject"}</button>
+                <button className="button button-primary" onClick={() => void decide(action, "approve")} disabled={Boolean(busyId) || !connection.reviewerId}>{busyId === action.id ? "Submitting…" : "Approve & execute"}</button>
+              </div>
+            </div>
+            <div className="action-details">
+              <div>
+                <div className="field-label">Action payload · from database</div>
+                <pre className="payload-preview">{readablePayload(action.payload ?? {})}</pre>
+              </div>
+              <div>
+                <div className="field-label">Agent rationale</div>
+                <p className="reasoning-text">{action.reasoning || "No rationale was stored for this action."}</p>
+                <div className="field-label" style={{ marginTop: 16 }}>Persisted policy results</div>
+                {policyItems.length ? <div className="policy-list">{policyItems.map(([key, value]) => <span className={`status-chip ${value === false ? "danger" : value === true ? "" : "neutral"}`} key={key}>{humanizeKey(key)}: {typeof value === "string" ? value : JSON.stringify(value)}</span>)}</div> : <p className="reasoning-text">No policy results were attached to this record.</p>}
+              </div>
+            </div>
+          </article>;
+        })}
+      </div> : null}
+
+      <SectionHeading title="Decision standard" description="This screen reads the queue and submits decisions to existing backend endpoints." trailing={<span className="panel-kicker">NO LOCAL APPROVAL STATE</span>} />
+      <Surface>
+        <div className="surface-body definition-list">
+          <div className="definition-row"><strong>Inspect the payload</strong><span>What will be sent or changed?</span></div>
+          <div className="definition-row"><strong>Read stored policy results</strong><span>Do not treat missing policy data as a pass.</span></div>
+          <div className="definition-row"><strong>Approve with awareness</strong><span>Current API approval calls the executor.</span></div>
+          <div className="definition-row"><strong>Verify final outcome</strong><span>An accepted approval is not proof of delivery.</span></div>
+        </div>
+      </Surface>
+    </div>
+  );
 }

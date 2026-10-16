@@ -1,36 +1,84 @@
 "use client";
 
-const locations = [
-  { name: "Indiranagar", area: "East Bengaluru", leads: 142, trials: 68, members: 42, spend: "₹48,000", cac: "₹1,142", rpr: "3.42", rate: "29.6%" },
-  { name: "Koramangala", area: "South Bengaluru", leads: 118, trials: 52, members: 36, spend: "₹41,500", cac: "₹1,152", rpr: "3.25", rate: "30.5%" },
-  { name: "Whitefield", area: "East Bengaluru", leads: 95, trials: 40, members: 28, spend: "₹32,000", cac: "₹1,142", rpr: "3.10", rate: "29.5%" },
-];
-
-const funnel = [
-  { label: "Captured leads", value: 355, width: "100%", count: "100%" },
-  { label: "Trial booked", value: 186, width: "52.4%", count: "52.4%" },
-  { label: "Trial attended", value: 160, width: "45.1%", count: "45.1%" },
-  { label: "Paid membership", value: 106, width: "29.9%", count: "29.9%" },
-];
+import { useMemo } from "react";
+import { formatCurrencyMinor, formatDuration, formatInteger, humanizeKey } from "@/lib/api";
+import { useOperationalData } from "@/lib/use-operational-data";
+import { ConnectPrompt, EmptyState, ErrorNotice, LoadingState, Metric, PageHeading, PanelHeading, SectionHeading, Surface } from "@/components/primitives";
 
 export default function PerformancePage() {
-  return <div>
-    <div className="page-heading">
-      <div><div className="eyebrow"><span className="eyebrow-mark" /> COMMERCIAL INTELLIGENCE / 02</div><h1>Performance overview</h1><p>Follow the money from first touch to paid membership. Compare branch efficiency, funnel leakage and acquisition cost.</p></div>
-      <div className="heading-meta"><span className="period-select">OCTOBER 2026&nbsp;⌄</span></div>
+  const { connection, business, checking, connectionError, reload, data, errors, loading, refresh } = useOperationalData();
+  const funnel = data.weekly?.funnel ?? {};
+  const stages = useMemo(() => Object.entries(funnel), [funnel]);
+  const maxCount = Math.max(1, ...stages.map(([, count]) => count));
+  const activeObjectives = (data.objectives ?? []).filter((objective) => objective.status?.toLowerCase() === "active");
+  const spendMinor = (data.campaigns ?? []).reduce((sum, campaign) => sum + (Number.isFinite(campaign.spend_minor) ? campaign.spend_minor : 0), 0);
+  const errorsPresent = Object.entries(errors).filter(([, message]) => Boolean(message));
+
+  if (checking) return <LoadingState label="Checking workspace connection" />;
+  if (!connection) return <ConnectPrompt />;
+  if (!business) return <><ErrorNotice message={connectionError || "Workspace connection could not be verified."} onRetry={() => { void reload(); }} /><ConnectPrompt /></>;
+
+  return (
+    <div className="page">
+      <PageHeading
+        eyebrow="COMMERCIAL INTELLIGENCE / PERFORMANCE"
+        title="Follow outcomes, not noise."
+        description="Live campaign reward, spend, funnel activity and business configuration returned by your ALLEYES API."
+        actions={<button className="button button-primary" onClick={() => void refresh()} disabled={loading}>{loading ? "Refreshing…" : "↻ Refresh reports"}</button>}
+      />
+      {errorsPresent.length ? <div className="notice notice-error"><span className="notice-symbol">!</span><div className="notice-copy"><strong>Some report data could not be loaded.</strong><p>{errorsPresent.map(([key, message]) => `${humanizeKey(key)}: ${message}`).join(" · ")}</p></div></div> : null}
+
+      <div className="metrics-grid">
+        <Metric index="01" label="Campaign records" value={data.campaigns ? formatInteger(data.campaigns.length) : "No reading"} detail="Rows returned by campaign performance view" />
+        <Metric index="02" label="Recorded media spend" value={data.campaigns ? formatCurrencyMinor(spendMinor, business.currency) : "No reading"} detail="Sum of reported campaign spend; no spend estimate" />
+        <Metric index="03" label="Active objectives" value={data.objectives ? formatInteger(activeObjectives.length) : "No reading"} detail={data.objectives ? `${data.objectives.length} saved objectives total` : "Objective report unavailable"} />
+        <Metric index="04" label="First response" value={data.weekly ? formatDuration(data.weekly.avg_first_response_seconds) : "No reading"} detail="Average from conversations table" />
+      </div>
+
+      <div className="content-grid">
+        <Surface>
+          <PanelHeading title="Funnel by persisted stage" detail="Counts come from contact-stage history; order follows the returned object." trailing={<span className="panel-kicker">API REPORT</span>} />
+          <div className="surface-body">
+            {loading && !data.weekly ? <LoadingState /> : stages.length ? <div className="funnel-list">
+              {stages.map(([key, count], index) => <div className="funnel-item" key={key}>
+                <div className="funnel-meta"><strong>{humanizeKey(key)}</strong><span className="funnel-value">{formatInteger(count)}</span></div>
+                <div className="funnel-track"><div className="funnel-fill" style={{ width: `${Math.max(0, Math.min(100, count / maxCount * 100))}%`, opacity: Math.max(.5, 1 - index * .08) }} /></div>
+              </div>)}
+            </div> : <EmptyState title={errors.weekly ? "Funnel report unavailable" : "No funnel stages returned"} detail={errors.weekly || "No persisted stage counts were returned for this business."} />}
+          </div>
+        </Surface>
+        <Surface>
+          <PanelHeading title="Business locations" detail="Configured branches returned by the locations endpoint" trailing={<span className="panel-kicker">{data.locations ? `${data.locations.length} LOCATIONS` : "API READ"}</span>} />
+          <div className="surface-body">
+            {loading && !data.locations ? <LoadingState /> : data.locations?.length ? <div className="objective-list">
+              {data.locations.map((location) => <div className="objective-row" key={location.id}>
+                <strong>{location.name}</strong>
+                <div className="objective-meta"><span>{location.city || "City not recorded"}</span>{location.capacity !== null && location.capacity !== undefined ? <span>Capacity {formatInteger(location.capacity)}/day</span> : null}{location.catchment_m !== null && location.catchment_m !== undefined ? <span>Catchment {formatInteger(location.catchment_m)}m</span> : null}</div>
+              </div>)}
+            </div> : <EmptyState title={errors.locations ? "Locations unavailable" : "No locations configured"} detail={errors.locations || "The API returned no business locations."} />}
+          </div>
+        </Surface>
+      </div>
+
+      <SectionHeading title="Campaign economics" description="Reward and spend from the database view, scoped to this business." trailing={<span className="panel-kicker">NO SYNTHETIC METRICS</span>} />
+      <Surface>
+        {loading && !data.campaigns ? <div className="surface-body"><LoadingState /></div> : data.campaigns?.length ? <div className="table-wrap"><table className="data-table"><thead><tr><th>Campaign</th><th>Reward</th><th>Spend</th><th>Reward / currency unit</th></tr></thead><tbody>
+          {data.campaigns.map((campaign) => <tr key={campaign.campaign_id}>
+            <td><span className="cell-main">{campaign.name || "Unnamed campaign"}</span><span className="cell-secondary">{campaign.campaign_id}</span></td>
+            <td className="number-cell">{Number.isFinite(campaign.reward) ? campaign.reward.toLocaleString("en-IN", { maximumFractionDigits: 2 }) : "Not recorded"}</td>
+            <td className="number-cell">{formatCurrencyMinor(campaign.spend_minor, business.currency)}</td>
+            <td>{Number.isFinite(campaign.reward_per_rupee) ? <span className="status-chip">{campaign.reward_per_rupee.toFixed(3)}×</span> : "Not recorded"}</td>
+          </tr>)}
+        </tbody></table></div> : <EmptyState title={errors.campaigns ? "Campaign endpoint unavailable" : "No campaign rows"} detail={errors.campaigns || "The campaign performance view has no rows for this business."} />}
+      </Surface>
+
+      <SectionHeading title="Objectives on record" description="Targets currently stored by the business workspace." />
+      {loading && !data.objectives ? <LoadingState /> : data.objectives?.length ? <div className="insight-list">
+        {data.objectives.map((objective) => <article className="insight-card" key={objective.id}>
+          <div className="insight-head"><h3>{objective.statement}</h3><span className={`status-chip ${objective.status === "active" ? "" : "neutral"}`}>{humanizeKey(objective.status || "unknown")}</span></div>
+          <div className="objective-meta"><span>Target {formatInteger(objective.target_value)}</span><span>Budget {formatCurrencyMinor(objective.budget_minor, business.currency)}</span><span>ID {objective.id}</span></div>
+        </article>)}
+      </div> : <Surface><EmptyState title={errors.objectives ? "Objectives unavailable" : "No objectives on record"} detail={errors.objectives || "No objectives were returned for this workspace."} /></Surface>}
     </div>
-    <div className="demo-notice"><span className="notice-icon">i</span><span><strong>Illustrative workspace data.</strong> These values are sample figures for interface review, not live campaign results. Connect the reporting API before using them for business decisions.</span></div>
-    <div className="metric-grid">
-      <div className="metric-card"><div className="metric-label">New members</div><div className="metric-value">106<span style={{fontSize:13,color:"#879188",letterSpacing:0}}> / 120</span></div><div className="metric-foot"><span>Monthly objective</span><span className="delta">88.3% reached</span></div><div className="metric-rule"><span style={{width:"88.3%"}} /></div></div>
-      <div className="metric-card"><div className="metric-label">Blended acquisition cost</div><div className="metric-value">₹1,146</div><div className="metric-foot"><span>Ceiling ₹1,500</span><span className="delta">23.6% under</span></div><div className="metric-rule"><span style={{width:"76.4%"}} /></div></div>
-      <div className="metric-card"><div className="metric-label">Media spend</div><div className="metric-value">₹1.21L</div><div className="metric-foot"><span>Budget ₹1.80L</span><span className="delta neutral">67.5% used</span></div><div className="metric-rule"><span style={{width:"67.5%"}} /></div></div>
-      <div className="metric-card"><div className="metric-label">Reward / rupee</div><div className="metric-value">3.28<span style={{fontSize:13,color:"#879188"}}>×</span></div><div className="metric-foot"><span>Retention-weighted proxy</span><span className="delta neutral">Sample metric</span></div><div className="metric-rule"><span style={{width:"72%"}} /></div></div>
-    </div>
-    <div className="content-grid">
-      <section className="panel"><div className="panel-header"><div><h2 className="panel-title">Conversion funnel</h2><p className="panel-subtitle">Lead-to-member progression across all demo branches</p></div><span className="panel-kicker">MONTH TO DATE</span></div><div className="panel-body"><div className="bar-list">{funnel.map((item,i)=><div className="bar-row" key={item.label}><div className="bar-meta"><strong>{item.label}</strong><span>{item.value.toLocaleString("en-IN")} <span style={{color:"#a0a8a0"}}>· {item.count}</span></span></div><div className="bar-track"><div className={"bar-fill "+(i===3?"dark":"")} style={{width:item.width}} /></div></div>)}</div><div style={{marginTop:20,paddingTop:14,borderTop:"1px solid #edf0ea",display:"flex",justifyContent:"space-between",gap:12,fontSize:10,color:"#778278"}}><span>Biggest drop-off: captured lead → trial booked</span><strong style={{color:"#a66a20"}}>47.6% leakage</strong></div></div></section>
-      <section className="panel"><div className="panel-header"><div><h2 className="panel-title">Objective status</h2><p className="panel-subtitle">Progress against the operating brief</p></div><span className="status-pill">On track</span></div><div className="panel-body"><div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:12}}><span style={{fontSize:11,color:"#727d74"}}>Membership target</span><strong style={{fontSize:24,letterSpacing:-1}}>106 <span style={{fontSize:11,color:"#7d877f",letterSpacing:0}}>/ 120</span></strong></div><div className="metric-rule" style={{height:7,marginTop:13}}><span style={{width:"88.3%"}} /></div><div style={{display:"flex",justifyContent:"space-between",marginTop:8,color:"#7b857d",fontSize:10}}><span>88.3% achieved</span><span>14 remaining</span></div><div style={{marginTop:23,paddingTop:17,borderTop:"1px solid #edf0ea"}}><div className="bar-meta"><strong>CAC ceiling</strong><span>₹1,146 / ₹1,500</span></div><div className="metric-rule" style={{height:7,marginTop:10}}><span style={{width:"76.4%",background:"#6f8a6a"}} /></div><p style={{margin:"9px 0 0",color:"#6d786e",fontSize:10,lineHeight:1.6}}>Current sample CAC sits below the stated ceiling. Validate spend and membership attribution before acting.</p></div></div></section>
-    </div>
-    <div className="section-heading"><div><h2>Branch economics</h2><p>Compare lead volume, trial conversion and acquisition cost.</p></div><span className="panel-kicker">3 LOCATIONS · SAMPLE</span></div>
-    <section className="panel"><div className="data-table-wrap"><table><thead><tr><th>Branch</th><th>Leads</th><th>Trials attended</th><th>Members</th><th>Trial → member</th><th>Spend</th><th>CAC</th><th>Reward / ₹</th></tr></thead><tbody>{locations.map((loc)=><tr key={loc.name}><td><span className="cell-primary">{loc.name}</span><br/><span className="cell-muted">{loc.area}</span></td><td>{loc.leads}</td><td>{loc.trials}</td><td className="table-number">{loc.members}</td><td>{loc.rate}</td><td>{loc.spend}</td><td className="table-number">{loc.cac}</td><td><span className="status-pill">{loc.rpr}×</span></td></tr>)}</tbody></table></div></section>
-  </div>;
+  );
 }
