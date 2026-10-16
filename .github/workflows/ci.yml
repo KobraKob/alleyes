@@ -57,7 +57,7 @@ jobs:
           # This CI database is disposable. Provision test-only roles explicitly;
           # production credentials and role management remain an operator concern.
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
-          DO $
+          DO $roles$
           BEGIN
             IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user') THEN
               EXECUTE 'CREATE ROLE app_user LOGIN PASSWORD ''app_secret''';
@@ -69,7 +69,7 @@ jobs:
             ELSE
               EXECUTE 'ALTER ROLE learning_svc WITH LOGIN PASSWORD ''learning_secret'' BYPASSRLS';
             END IF;
-          END $;
+          END $roles$;
           GRANT CONNECT ON DATABASE marketing_engine TO app_user, learning_svc;
           GRANT USAGE ON SCHEMA public TO app_user, learning_svc;
           SQL
