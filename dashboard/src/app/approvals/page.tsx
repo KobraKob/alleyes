@@ -1,33 +1,189 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  formatDate,
+  humanize,
+  isUuid,
+  type ProposedAction,
+} from "@/lib/api";
+import { useWorkspace } from "@/components/workspace-provider";
+import {
+  ConnectionGate,
+  EmptyState,
+  ErrorState,
+  LiveNotice,
+  LoadingState,
+  PageHeader,
+  Panel,
+  RefreshButton,
+} from "@/components/ui";
 
-type DemoAction = { id: string; kind: string; channel: string; risk: number; reasoning: string; content: string; proposed: string; checks: string[]; status: "pending" | "approved" | "rejected" };
-const initialActions: DemoAction[] = [
-  { id: "ACT-DEMO-014", kind: "Lead response", channel: "WhatsApp", risk: 1, reasoning: "A new enquiry asked about trial availability at the Indiranagar branch. Proposed reply uses the configured trial offer and routes unknown questions to staff.", content: "Hi there — thanks for reaching out to Iron Fitness. We can help you book a trial at our Indiranagar branch. What day and time works best for you?", proposed: "09:18:42 IST · 2 min ago", checks: ["Consent", "Quiet hours", "Claims", "Kill switch"], status: "pending" },
-  { id: "ACT-DEMO-013", kind: "Campaign draft", channel: "Meta Ads", risk: 2, reasoning: "Test a schedule-led creative against the current strength-training hook. Draft remains paused pending human review.", content: "Creative hypothesis: branch-specific class schedules may improve qualified trial bookings. No campaign will be created or activated in this preview.", proposed: "09:12:05 IST · 8 min ago", checks: ["Budget envelope", "Claims", "Branch radius"], status: "pending" },
-];
+const displayJson = (value: unknown) => {
+  try { return JSON.stringify(value, null, 2); } catch { return String(value); }
+};
+
+function PolicySummary({ results }: { results: Record<string, unknown> }) {
+  const entries = Object.entries(results || {});
+  if (!entries.length) {
+    return <p className="muted-copy">No policy evidence was attached to this action.</p>;
+  }
+  return (
+    <div className="policy-check-list">
+      {entries.map(([key, value]) => {
+        const passed = value === true || (typeof value === "object" && value !== null && "passed" in value && (value as { passed?: unknown }).passed === true);
+        const failed = value === false || (typeof value === "object" && value !== null && "passed" in value && (value as { passed?: unknown }).passed === false);
+        return (
+          <div className="policy-check" key={key}>
+            <span className={"policy-check-status " + (passed ? "pass" : failed ? "fail" : "unknown")}>{passed ? "✓" : failed ? "×" : "·"}</span>
+            <span className="policy-check-copy"><strong>{humanize(key)}</strong><small>{typeof value === "string" ? value : typeof value === "boolean" ? (value ? "Passed" : "Failed") : displayJson(value)}</small></span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function ApprovalsPage() {
-  const [actions, setActions] = useState(initialActions);
-  const [filter, setFilter] = useState<"all" | "pending" | "resolved">("all");
+  const { connectionState, config, request } = useWorkspace();
+  const [actions, setActions] = useState<ProposedAction[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [busyId, setBusyId] = useState("");
+  const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const updateAction = (id:string,status:"approved"|"rejected") => {
-    setActions(current => current.map(a => a.id === id ? {...a,status} : a));
-    setNotice(status === "approved" ? "Demo approval recorded locally. No connector was called and no message was sent." : "Demo rejection recorded locally. No backend record was changed.");
-  };
-  const visible = actions.filter(a => filter === "all" || (filter === "pending" ? a.status === "pending" : a.status !== "pending"));
-  const pending = actions.filter(a=>a.status==="pending").length;
-  return <div>
-    <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-mark" /> GOVERNANCE / 01</div><h1>Action desk</h1><p>Inspect what automation wants to do, why it wants to do it, and whether policy allows the action.</p></div><div className="heading-meta"><span className="status-pill warn">{pending} awaiting review</span></div></div>
-    <div className="demo-notice"><span className="notice-icon">!</span><span><strong>Preview mode — no live execution.</strong> The items below are seeded examples. Approve and reject controls change this screen only; production approval must call the governed API and record the resulting audit event.</span></div>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:14,flexWrap:"wrap"}}><div className="heading-meta"><span className="panel-kicker">ACTION QUEUE</span><span style={{color:"#c1c7bf"}}>/</span><span>{actions.length} sample actions</span></div><div style={{display:"flex",gap:5}}>{(["all","pending","resolved"] as const).map(key=><button key={key} className="btn" onClick={()=>setFilter(key)} style={filter===key?{background:"#17211e",borderColor:"#17211e",color:"#fff"}:{}}>{key==="all"?"All actions":key==="pending"?"Pending":"Resolved"}</button>)}</div></div>
-    {notice && <div className="demo-notice"><span className="notice-icon">i</span><span>{notice}</span><button className="panel-action" style={{marginLeft:"auto",flexShrink:0}} onClick={()=>setNotice("")}>Dismiss</button></div>}
-    {visible.length===0?<section className="panel"><div className="empty-state"><strong>No actions in this view</strong>Try another filter or return when the queue contains new work.</div></section>:visible.map(act=><article className="action-card" key={act.id}>
-      <div className="action-top"><div className="action-identity"><div className="channel-icon">{act.channel==="WhatsApp"?"W":"M"}</div><div><h2 className="action-title">{act.kind}</h2><div className="action-meta"><span className="action-id">{act.id}</span><span>·</span><span>{act.channel}</span><span>·</span><span className="status-pill warn">Risk tier {act.risk}</span><span className="status-pill neutral">{act.status==="pending"?"Pending review":act.status}</span></div></div></div>
-      {act.status==="pending"?<div className="action-buttons"><button className="btn btn-primary" onClick={()=>updateAction(act.id,"approved")}>Simulate approval</button><button className="btn btn-danger" onClick={()=>updateAction(act.id,"rejected")}>Reject demo</button></div>:<div className="action-buttons"><span className="status-pill neutral">Resolved locally</span></div>}</div>
-      <div className="action-content"><div><div className="field-label">Proposed payload · preview</div><div className="message-preview">{act.content}</div><div style={{marginTop:10,color:"#8a938b",fontSize:9}}>Proposed {act.proposed}</div></div><div><div className="field-label">Agent rationale</div><p className="reason-text">{act.reasoning}</p><div className="field-label" style={{marginTop:16}}>Policy pre-checks · illustrative</div><div className="checks">{act.checks.map(check=><span className="check-chip" key={check}>✓ {check}</span>)}<span className="check-chip pending">! Not API-verified</span></div></div></div>
-    </article>)}
-    <div className="panel" style={{marginTop:18}}><div className="panel-header"><div><h2 className="panel-title">Review standard</h2><p className="panel-subtitle">What a real approval record must include</p></div><span className="panel-kicker">GOVERNANCE CONTRACT</span></div><div className="panel-body" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:18}}>{[{n:"01",t:"Policy evidence",d:"Persist each guardrail result and rejection reason."},{n:"02",t:"Human intent",d:"Record reviewer, decision, edits and timestamp."},{n:"03",t:"Executor outcome",d:"Show connector response, retries and external reference."},{n:"04",t:"Idempotency",d:"Repeated clicks must never duplicate a side effect."}].map(x=><div key={x.n}><div className="panel-kicker">{x.n}</div><strong style={{display:"block",marginTop:8,fontSize:11}}>{x.t}</strong><p style={{margin:"6px 0 0",color:"#7b857d",fontSize:10,lineHeight:1.6}}>{x.d}</p></div>)}</div></div>
-  </div>;
+  const [commentById, setCommentById] = useState<Record<string, string>>({});
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await request<ProposedAction[]>("/v1/actions?status=proposed");
+      setActions(result);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not load the action queue.");
+    } finally {
+      setLoading(false);
+    }
+  }, [request]);
+
+  useEffect(() => {
+    if (connectionState === "connected") void load();
+  }, [connectionState, load]);
+
+  async function decide(action: ProposedAction, decision: "approve" | "reject") {
+    if (!isUuid(config.userId)) {
+      setNotice("Set a valid reviewer user ID in workspace connection settings before recording a decision.");
+      window.dispatchEvent(new Event("alleeyes:open-connection"));
+      return;
+    }
+    const explanation = commentById[action.id]?.trim() || undefined;
+    const promptText = decision === "approve"
+      ? "Approve this action? The backend governance pipeline will record your decision and may invoke its executor."
+      : "Reject this proposed action? The decision will be recorded in the backend.";
+    if (!window.confirm(promptText)) return;
+    setBusyId(action.id);
+    setError("");
+    setNotice("");
+    try {
+      const response = await request<{ status?: string; action_id?: string; [key: string]: unknown }>(
+        `/v1/actions/${encodeURIComponent(action.id)}/${decision}`,
+        {
+          method: "POST",
+          body: JSON.stringify({ user_id: config.userId, comment: explanation ?? null }),
+        },
+      );
+      setNotice(`${decision === "approve" ? "Approval" : "Rejection"} recorded by API. Result: ${response.status || "received"}.`);
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not submit this decision.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  if (connectionState === "loading") return <LoadingState label="Checking workspace connection" />;
+  if (connectionState !== "connected") return <><PageHeader eyebrow="GOVERNANCE / 02" title="Action desk" description="Inspect proposed work and record a decision through the governed API." /><ConnectionGate /></>;
+
+  const pendingCount = actions.length;
+
+  return (
+    <div className="page-stack">
+      <PageHeader
+        eyebrow="GOVERNANCE / 02"
+        title="Action desk"
+        description="Review the actual proposed actions returned by the policy pipeline. Decisions are submitted to the backend; they are not local UI toggles."
+        action={<RefreshButton onClick={() => void load()} busy={loading} />}
+      />
+
+      <div className="desk-summary">
+        <div className="desk-summary-main">
+          <span className="micro-tag">GOVERNED QUEUE</span>
+          <strong>{pendingCount.toString().padStart(2, "0")} <span>awaiting decision</span></strong>
+          <p>Only actions whose current status is proposed and which require approval are returned by this endpoint.</p>
+        </div>
+        <div className="desk-summary-side"><span>DECISION AUTHORITY</span><strong>{isUuid(config.userId) ? "Reviewer configured" : "Reviewer ID required"}</strong><small>{isUuid(config.userId) ? "User ID is set for API submissions." : "Connect settings and enter reviewer UUID to approve or reject."}</small></div>
+      </div>
+
+      {notice && <LiveNotice tone="success">{notice}</LiveNotice>}
+      {error && <ErrorState title="Action request failed" message={error} onRetry={() => void load()} />}
+
+      {loading && actions.length === 0 ? <LoadingState label="Loading proposed actions" /> : actions.length === 0 && !error ? (
+        <Panel title="Queue clear" description="No proposed actions currently require human review.">
+          <EmptyState title="Nothing needs a decision" description="New approval-required actions will appear here when the backend returns them." />
+        </Panel>
+      ) : (
+        <div className="action-list">
+          {actions.map((action, index) => (
+            <article className="action-card" key={action.id}>
+              <header className="action-card-head">
+                <div className="action-card-title-wrap">
+                  <div className="action-count">{String(index + 1).padStart(2, "0")}</div>
+                  <div>
+                    <div className="action-title-line"><h2>{humanize(action.kind)}</h2><span className={"risk-tag risk-" + Math.min(3, Math.max(1, action.risk_tier))}>RISK {action.risk_tier}</span></div>
+                    <div className="action-meta-line"><code>{action.id}</code><span>Proposed {formatDate(action.proposed_at)}</span></div>
+                  </div>
+                </div>
+                <span className="status-tag status-warning"><i />Awaiting review</span>
+              </header>
+
+              <div className="action-card-grid">
+                <section className="action-detail-section">
+                  <p className="detail-label">AGENT REASONING</p>
+                  <p className="action-reasoning">{action.reasoning || "No reasoning was attached to this action."}</p>
+                  <details className="payload-details">
+                    <summary>Inspect exact payload <span>↘</span></summary>
+                    <pre>{displayJson(action.payload)}</pre>
+                  </details>
+                </section>
+                <section className="action-detail-section policy-section">
+                  <p className="detail-label">RECORDED POLICY RESULTS</p>
+                  <PolicySummary results={action.policy_results} />
+                </section>
+              </div>
+
+              <div className="action-card-footer">
+                <label className="comment-field">
+                  <span>Decision note <small>OPTIONAL</small></span>
+                  <input value={commentById[action.id] || ""} onChange={(event) => setCommentById((current) => ({ ...current, [action.id]: event.target.value }))} />
+                </label>
+                <div className="decision-buttons">
+                  <button className="button button-danger" onClick={() => void decide(action, "reject")} disabled={busyId === action.id}>
+                    {busyId === action.id ? "Submitting…" : "Reject"}
+                  </button>
+                  <button className="button button-primary" onClick={() => void decide(action, "approve")} disabled={busyId === action.id}>
+                    {busyId === action.id ? "Submitting…" : "Approve action"} <span aria-hidden="true">↗</span>
+                  </button>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      <div className="workflow-note">
+        <span className="workflow-note-index">00 / NOTE</span>
+        <p>Approval can trigger the configured executor. Verify dry-run status, connector credentials, consent, and budget policy before granting approval to production actions.</p>
+      </div>
+    </div>
+  );
 }

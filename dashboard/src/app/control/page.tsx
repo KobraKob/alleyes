@@ -1,43 +1,156 @@
 "use client";
 
-import { useState } from "react";
-
-const initialLevels = [
-  { kind:"send_message",level:1,desc:"Outbound messages and follow-up sequences." },
-  { kind:"create_campaign",level:1,desc:"Create a campaign draft. Activation must remain a separate decision." },
-  { kind:"change_budget",level:1,desc:"Change media budget within approved caps and rate limits." },
-  { kind:"pause_campaign",level:2,desc:"Pause a campaign when policy and evidence permit." },
-];
-const initialAudit = [
-  { id:"AUD-DEMO-104",actor:"agent:lead_response",action:"propose_action",entity:"actions",time:"2 min ago" },
-  { id:"AUD-DEMO-103",actor:"system:updater",action:"update_arm_stats",entity:"arm_stats",time:"15 min ago" },
-  { id:"AUD-DEMO-102",actor:"user:demo",action:"approve_action",entity:"actions/ACT-DEMO-012",time:"1 hour ago" },
-  { id:"AUD-DEMO-101",actor:"system:partition_manager",action:"ensure_partitions",entity:"events",time:"Yesterday" },
-];
+import { useCallback, useEffect, useState } from "react";
+import { humanize, type KillSwitchStatus } from "@/lib/api";
+import { useWorkspace } from "@/components/workspace-provider";
+import {
+  ConnectionGate,
+  ErrorState,
+  LiveNotice,
+  LoadingState,
+  PageHeader,
+  Panel,
+  RefreshButton,
+} from "@/components/ui";
 
 export default function ControlPage() {
-  const [halted,setHalted]=useState(false);
-  const [confirm,setConfirm]=useState(false);
-  const [levels,setLevels]=useState(initialLevels);
-  const [audit,setAudit]=useState(initialAudit);
-  const [notice,setNotice]=useState("");
-  const toggleHalt=()=>{
-    if(!halted&&!confirm){setConfirm(true);return;}
-    const next=!halted;
-    setHalted(next);setConfirm(false);
-    setAudit(current=>[{id:"AUD-DEMO-"+(105+current.length),actor:"user:demo",action:next?"simulate_kill_switch_engage":"simulate_kill_switch_release",entity:"kill_switches",time:"Just now"},...current]);
-    setNotice(next?"Local preview marked as halted. This did not engage the production kill switch.":"Local preview marked as running. This did not release a production kill switch.");
-  };
-  return <div>
-    <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-mark" /> POLICY & OVERSIGHT / 04</div><h1>System control</h1><p>Set the boundaries for autonomous work. Every permission change and emergency action must be enforced and audited server-side.</p></div><div className="heading-meta"><span className="status-pill neutral">Local preview</span></div></div>
-    <div className="demo-notice"><span className="notice-icon">!</span><span><strong>Not connected to production controls.</strong> This page is a UI prototype. Policy changes, kill-switch state and audit entries exist only in browser state. Do not use this screen to manage live spend or messaging.</span></div>
-    {notice&&<div className="demo-notice"><span className="notice-icon">i</span><span>{notice}</span></div>}
-    <section className={"control-banner "+(halted?"is-halted":"")}><div className="control-copy"><div className="panel-kicker">EMERGENCY CONTROL / DEMO ONLY</div><h2 style={{marginTop:9}}>Global execution kill switch</h2><div className={"control-state "+(halted?"halted":"")}><span className="status-dot" style={halted?{background:"#b7463b"}:{}}/>{halted?"PREVIEW HALTED":"PREVIEW ARMED"}</div><p>In production, this control must block the executor, cancel queued sends and record a durable audit event. Here it only changes the visual preview state.</p></div><div style={{display:"grid",gap:7,justifyItems:"end"}}><button className={"btn "+(halted?"btn-primary":"btn-danger")} onClick={toggleHalt}>{confirm?"Confirm demo halt":halted?"Clear preview halt":"Simulate kill switch"}</button>{confirm&&<button className="panel-action" onClick={()=>setConfirm(false)}>Cancel</button>}</div></section>
-    <div className="content-grid">
-      <section className="panel"><div className="panel-header"><div><h2 className="panel-title">Autonomy policy matrix</h2><p className="panel-subtitle">Choose the preview tier for each action kind</p></div><span className="panel-kicker">LOCAL STATE</span></div><div className="panel-body"><div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:14}}><span className="status-pill neutral">L1 · Human approval</span><span className="status-pill warn">L2 · Low-risk auto</span><span className="status-pill">L3 · Within caps</span></div>{levels.map(item=><div className="level-row" key={item.kind}><div><strong>{item.kind}</strong><p>{item.desc}</p></div><div className="level-switch">{[1,2,3].map(level=><button key={level} className={item.level===level?"selected":""} aria-label={item.kind+" level "+level} aria-pressed={item.level===level} onClick={()=>setLevels(current=>current.map(row=>row.kind===item.kind?{...row,level}:row))}>L{level}</button>)}</div></div>)}<p style={{margin:"14px 0 0",color:"#89928a",fontSize:9,lineHeight:1.6}}>These selections do not alter backend autonomy_policies. Production implementation must persist changes through an authenticated endpoint.</p></div></section>
-      <section className="panel"><div className="panel-header"><div><h2 className="panel-title">Operating limits</h2><p className="panel-subtitle">Required guardrails before any live rollout</p></div></div><div className="panel-body" style={{display:"grid",gap:0}}>{[{t:"Consent & suppression",d:"Re-check immediately before execution."},{t:"Quiet hours",d:"Use the business timezone, not server time."},{t:"Budget cap",d:"Enforce daily and monthly ceilings."},{t:"Message frequency",d:"Apply contact-level weekly send limits."},{t:"Claims validation",d:"Deterministic blocklist before model review."},{t:"Audit immutability",d:"Append-only record of decisions and outcomes."}].map((x,i)=><div key={x.t} style={{display:"flex",gap:10,padding:"12px 0",borderBottom:i===5?"0":"1px solid #edf0ea"}}><span style={{color:"#70894b",fontWeight:800,fontSize:11}}>0{i+1}</span><div><strong style={{fontSize:10}}>{x.t}</strong><p style={{margin:"4px 0 0",fontSize:10,color:"#7b857d",lineHeight:1.5}}>{x.d}</p></div></div>)}</div></section>
+  const { connectionState, config, request } = useWorkspace();
+  const [switchStatus, setSwitchStatus] = useState<KillSwitchStatus | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await request<KillSwitchStatus>("/v1/kill-switch/status");
+      setSwitchStatus(result);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Could not read kill-switch status.");
+    } finally {
+      setLoading(false);
+    }
+  }, [request]);
+
+  useEffect(() => {
+    if (connectionState === "connected") void refresh();
+  }, [connectionState, refresh]);
+
+  async function toggleSwitch(engaged: boolean) {
+    if (!reason.trim()) {
+      setError("Enter a reason before changing the global kill switch.");
+      return;
+    }
+    const verb = engaged ? "engage" : "release";
+    const warning = engaged
+      ? "Engage the global kill switch? The backend will cancel matching proposed or approved unexecuted actions."
+      : "Release the global kill switch? New actions may proceed through the remaining policy and executor checks.";
+    if (!window.confirm(warning)) return;
+
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await request<KillSwitchStatus & { status: string }>(
+        "/v1/kill-switch",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            scope: "all",
+            engaged,
+            user_id: config.userId.trim() || null,
+            reason: reason.trim(),
+          }),
+        },
+      );
+      setSwitchStatus({ scope: result.scope, engaged: result.engaged });
+      setNotice(result.engaged ? "Global kill switch is engaged in the backend." : "Global kill switch is released in the backend.");
+      setReason("");
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : `Could not ${verb} the kill switch.`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (connectionState === "loading") return <LoadingState label="Checking workspace connection" />;
+  if (connectionState !== "connected") return <><PageHeader eyebrow="POLICY / 05" title="System control" description="Read and operate the global kill switch through the authenticated API." /><ConnectionGate /></>;
+
+  return (
+    <div className="page-stack">
+      <PageHeader
+        eyebrow="POLICY / 05"
+        title="System control"
+        description="Read and operate the global execution kill switch. Every state change is sent to the backend, not simulated in the browser."
+        action={<RefreshButton onClick={() => void refresh()} busy={loading} />}
+      />
+
+      {notice && <LiveNotice tone="success">{notice}</LiveNotice>}
+      {error && <ErrorState title="Control request failed" message={error} onRetry={() => void refresh()} />}
+
+      <section className={"kill-switch-panel " + (switchStatus?.engaged ? "engaged" : "")}>
+        <div className="kill-switch-visual" aria-hidden="true">
+          <span className="kill-switch-ring"><span /></span>
+          <span className="kill-switch-visual-label">GLOBAL / ALL</span>
+        </div>
+        <div className="kill-switch-copy">
+          <div className="kill-switch-topline"><span className={"status-lamp " + (switchStatus ? switchStatus.engaged ? "red" : "green" : "grey")} />{loading && !switchStatus ? "READING STATE" : switchStatus ? switchStatus.engaged ? "HALT ENGAGED" : "HALT RELEASED" : "STATUS UNKNOWN"}</div>
+          <h2>{switchStatus ? switchStatus.engaged ? "Execution halted." : "Execution can proceed." : "Check control state."}</h2>
+          <p>{switchStatus
+            ? switchStatus.engaged
+              ? "The backend reports the global kill switch is engaged. Keep it active while investigating the underlying issue."
+              : "The global kill switch is currently released. Actions must still pass the configured policy and executor checks."
+            : "Read the current global kill-switch status from the business API before changing execution state."}</p>
+          <div className="kill-switch-meta"><span>SCOPE <b>{switchStatus ? humanize(switchStatus.scope) : "All actions"}</b></span><span>STATE SOURCE <b>Backend API</b></span></div>
+        </div>
+        <div className="kill-switch-action">
+          {!switchStatus?.engaged ? (
+            <button className="button button-danger button-wide" onClick={() => void toggleSwitch(true)} disabled={busy || loading || !switchStatus}>
+              {busy ? "Updating state…" : "Engage kill switch"} <span aria-hidden="true">⏻</span>
+            </button>
+          ) : (
+            <button className="button button-primary button-wide" onClick={() => void toggleSwitch(false)} disabled={busy || loading}>
+              {busy ? "Updating state…" : "Release kill switch"} <span aria-hidden="true">↗</span>
+            </button>
+          )}
+          <small>Confirmation required. Reason is recorded with the change.</small>
+        </div>
+      </section>
+
+      <section className="control-reason-panel">
+        <label className="reason-editor">
+          <span>Change reason <i>REQUIRED</i></span>
+          <textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={3} maxLength={500} />
+          <small>Describe the incident or operational reason. Avoid personal customer data.</small>
+        </label>
+        <div className="reason-guidance">
+          <strong>Before changing state</strong>
+          <p>Confirm the affected business, identify queued work, and tell the team who owns the incident. Releasing the switch does not replace normal policy checks.</p>
+          <div className="reason-rule" />
+          <span>{reason.trim().length}/500 characters</span>
+        </div>
+      </section>
+
+      <div className="dashboard-grid control-info-grid">
+        <Panel title="What engagement does" description="Behaviour performed by the current backend handler.">
+          <div className="control-fact-list">
+            <div><span>01</span><p>Persists the global kill-switch state for this business.</p></div>
+            <div><span>02</span><p>Rejects matching proposed or approved actions that have not executed yet.</p></div>
+            <div><span>03</span><p>Returns the resulting state so this screen can confirm the change.</p></div>
+          </div>
+        </Panel>
+        <Panel title="Operational boundary" description="Keep these limits visible to reviewers.">
+          <div className="control-fact-list">
+            <div><span>!</span><p>This UI reflects the API response; it is not an independent monitor of every connector.</p></div>
+            <div><span>!</span><p>Verify worker enforcement, in-flight network requests, and provider-side campaign state during incident response.</p></div>
+            <div><span>!</span><p>The current API does not expose audit-history queries. This page will not fabricate an audit table.</p></div>
+          </div>
+        </Panel>
+      </div>
+      <div className="footnote footnote-bottom">State endpoint: <code>GET /v1/kill-switch/status</code> · Change endpoint: <code>POST /v1/kill-switch</code></div>
     </div>
-    <div className="section-heading"><div><h2>Audit trail</h2><p>Sample events for layout only. Production records must be sourced from the immutable audit log.</p></div><span className="panel-kicker">APPEND-ONLY MODEL · DEMO RECORDS</span></div>
-    <section className="panel"><div className="data-table-wrap"><table><thead><tr><th>Event ID</th><th>Actor</th><th>Action</th><th>Entity</th><th>Relative time</th></tr></thead><tbody>{audit.map(row=><tr key={row.id}><td className="cell-muted">{row.id}</td><td><span className="audit-actor">{row.actor}</span></td><td><span className="audit-action">{row.action}</span></td><td>{row.entity}</td><td className="cell-muted">{row.time}</td></tr>)}</tbody></table></div></section>
-  </div>;
+  );
 }

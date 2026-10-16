@@ -65,7 +65,6 @@ class Settings(BaseSettings):
     # Traces & Storage
     trace_store_uri: str = Field(default="file://./traces", alias="TRACE_STORE_URI")
 
-
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":
         """Fail closed when production is configured with development credentials."""
@@ -75,7 +74,10 @@ class Settings(BaseSettings):
             "DATABASE_URL": (self.database_url, "migrator_secret"),
             "APP_ROLE_URL": (self.app_role_url, "app_secret"),
             "LEARNING_ROLE_URL": (self.learning_role_url, "learning_secret"),
-            "JWT_SECRET": (self.jwt_secret, "super-secret-jwt-signing-key-for-auth-token-validation"),
+            "JWT_SECRET": (
+                self.jwt_secret,
+                "super-secret-jwt-signing-key-for-auth-token-validation",
+            ),
             "WHATSAPP_VERIFY_TOKEN": (self.whatsapp_verify_token, "wa_verify_token_default"),
             "WHATSAPP_APP_SECRET": (self.whatsapp_app_secret, "wa_secret_default"),
             "META_APP_SECRET": (self.meta_app_secret, "meta_secret_default"),
@@ -87,8 +89,7 @@ class Settings(BaseSettings):
         ]
         if unsafe:
             raise ValueError(
-                "Production configuration contains missing/default secrets: "
-                + ", ".join(unsafe)
+                "Production configuration contains missing/default secrets: " + ", ".join(unsafe)
             )
         if len(self.pii_key_bytes) != 32:
             raise ValueError("PII_ENCRYPTION_KEY must decode to exactly 32 bytes.")

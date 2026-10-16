@@ -1,4 +1,4 @@
-""""FastAPI application entry point."""
+"""FastAPI application entry point."""
 
 from uuid import UUID
 
@@ -98,9 +98,7 @@ async def authenticate_api_requests(
         )
 
     if authenticated_id is None:
-        return JSONResponse(
-            status_code=401, content={"detail": "Invalid or revoked API key."}
-        )
+        return JSONResponse(status_code=401, content={"detail": "Invalid or revoked API key."})
     if authenticated_id != requested_id:
         return JSONResponse(
             status_code=403,

@@ -1,34 +1,214 @@
 "use client";
 
-const arms = [
-  { label:"Strength & intensity", sig:"ad_hook:strength_focus", alpha:32.4, beta:58.2, n:420, traffic:42.8, mean:0.358, low:0.26, high:0.45 },
-  { label:"Community & coaching", sig:"ad_hook:community_vibe", alpha:18.2, beta:72.1, n:280, traffic:28.5, mean:0.201, low:0.12, high:0.28 },
-  { label:"Progress-led training", sig:"ad_hook:progress_focus", alpha:14.5, beta:82.0, n:210, traffic:21.4, mean:0.150, low:0.08, high:0.22 },
-  { label:"Extreme abs", sig:"ad_hook:extreme_abs", alpha:4.1, beta:94.2, n:72, traffic:7.3, mean:0.042, low:0.01, high:0.08 },
-];
-const insights = [
-  { title:"Trial-led offers may outperform flat discounts in selected neighbourhoods.", status:"Hypothesis", evidence:["Segment: women 25–34","Reported lift: +31%","Sample n: 412"], detail:"Example insight only. Validate source rows, confidence interval and attribution model before treating this as a supported playbook." },
-  { title:"Faster first response may correlate with higher trial attendance.", status:"Needs validation", evidence:["Reported correlation: r = 0.64","Sample n: 620","Potential confounders: 3"], detail:"Correlation does not establish causation. Compare response-time cohorts while controlling for lead source, intent and opening hours." },
-];
+import { useCallback, useEffect, useState } from "react";
+import {
+  formatDate,
+  humanize,
+  type PackSummary,
+  type PlaybookInsight,
+  type VerticalPack,
+} from "@/lib/api";
+import { useWorkspace } from "@/components/workspace-provider";
+import {
+  ConnectionGate,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  MetricCard,
+  PageHeader,
+  Panel,
+  RefreshButton,
+  SectionHeading,
+} from "@/components/ui";
+
+const asEvidence = (evidence: unknown): string => {
+  if (evidence === null || evidence === undefined) return "No evidence payload attached.";
+  if (typeof evidence === "string") return evidence;
+  try { return JSON.stringify(evidence, null, 2); } catch { return String(evidence); }
+};
+
+function ConfidenceValue({ value }: { value: number }) {
+  const label = Number.isFinite(value)
+    ? value >= 0 && value <= 1 ? `${Math.round(value * 100)}%` : value.toLocaleString("en-IN", { maximumFractionDigits: 3 })
+    : "Not recorded";
+  const width = Number.isFinite(value) && value >= 0 && value <= 1 ? Math.round(value * 100) : null;
+  return (
+    <div className="confidence-block">
+      <div className="confidence-head"><span>RECORDED CONFIDENCE</span><strong>{label}</strong></div>
+      {width !== null && <div className="confidence-track"><span style={{ width: `${width}%` }} /></div>}
+    </div>
+  );
+}
 
 export default function LearningPage() {
-  return <div>
-    <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-mark" /> EXPERIMENTATION / 03</div><h1>Learning lab</h1><p>Understand which creative, offer and follow-up choices earn better downstream outcomes — and how much uncertainty remains.</p></div><div className="heading-meta"><span className="period-select">DECISION POINT: AD HOOK&nbsp;⌄</span></div></div>
-    <div className="demo-notice"><span className="notice-icon">i</span><span><strong>Illustrative learning state.</strong> Arm statistics and insights are hardcoded preview values. They are not loaded from the learning API and must not be interpreted as validated evidence.</span></div>
-    <div className="metric-grid">
-      <div className="metric-card"><div className="metric-label">Arms under observation</div><div className="metric-value">04</div><div className="metric-foot"><span>One decision point</span><span className="delta neutral">Demo set</span></div></div>
-      <div className="metric-card"><div className="metric-label">Assigned observations</div><div className="metric-value">982</div><div className="metric-foot"><span>Across shown variants</span><span className="delta neutral">Sample data</span></div></div>
-      <div className="metric-card"><div className="metric-label">Exploration floor</div><div className="metric-value">5.0%</div><div className="metric-foot"><span>Uniform probability mix</span><span className="delta neutral">Configured example</span></div></div>
-      <div className="metric-card"><div className="metric-label">Supported insights</div><div className="metric-value">00</div><div className="metric-foot"><span>Verified in this preview</span><span className="delta neutral">None confirmed</span></div></div>
-    </div>
-    <div className="learning-layout">
-      <section className="panel"><div className="panel-header"><div><h2 className="panel-title">Arm posterior comparison</h2><p className="panel-subtitle">Illustrative conversion-rate posterior means and 95% credible intervals</p></div><span className="panel-kicker">BETA MODEL</span></div><div className="panel-body">{arms.map((arm,i)=><div className="posterior-row" key={arm.sig}><div className="posterior-label"><strong>{arm.label}</strong><small>{arm.sig}</small><span style={{display:"block",marginTop:5,color:"#8a948b",fontSize:9}}>{arm.n} observations · {arm.traffic}% traffic</span></div><div><div className="interval-track"><span className="interval-range" style={{left:(arm.low*100)+"%",width:((arm.high-arm.low)*100)+"%"}}/><span className="interval-dot" style={{left:(arm.mean*100)+"%"}}/></div><div style={{display:"flex",justifyContent:"space-between",marginTop:6,color:"#89928a",fontSize:9,fontFamily:"monospace"}}><span>{arm.low.toFixed(2)}</span><span>95% interval</span><span>{arm.high.toFixed(2)}</span></div></div><div className="posterior-mean">{arm.mean.toFixed(3)}<small style={{display:"block",marginTop:5,color:"#8b948c",fontSize:9,fontWeight:400}}>Beta({arm.alpha}, {arm.beta})</small></div></div>)}</div><div style={{padding:"0 19px 16px",color:"#8a948b",fontSize:9,lineHeight:1.6}}>Interval lengths are scaled to a 0–1 outcome range. Production intervals should be calculated from persisted posterior parameters.</div></section>
-      <div style={{display:"grid",gap:15,alignContent:"start"}}>
-        <section className="panel"><div className="panel-header"><div><h2 className="panel-title">Traffic allocation</h2><p className="panel-subtitle">Current sample split by arm</p></div></div><div className="panel-body"><div className="chart-bars">{arms.map(a=><div className="chart-bar-group" key={a.sig}><div className="chart-bar" style={{height:a.traffic+"%"}}/><span className="chart-bar-label">{a.traffic}%</span></div>)}</div><div className="chart-caption"><span>Strength</span><span>Community</span><span>Progress</span><span>Abs</span></div><div style={{marginTop:17,paddingTop:13,borderTop:"1px solid #edf0ea",fontSize:10,color:"#6f7a71",lineHeight:1.7}}>A high allocation share is not proof of a causal win. Check credible intervals and realized downstream rewards.</div></div></section>
-        <section className="panel"><div className="panel-header"><div><h2 className="panel-title">How to read this</h2><p className="panel-subtitle">Decision quality, not vanity metrics</p></div></div><div className="panel-body" style={{display:"grid",gap:13}}>{[{t:"Posterior mean",d:"Expected outcome under the current Beta posterior."},{t:"Credible interval",d:"Range of plausible conversion rates given the data and model."},{t:"Traffic allocation",d:"Where the policy sends opportunities; not necessarily the winning rate."}].map(x=><div key={x.t}><strong style={{fontSize:10}}>{x.t}</strong><p style={{margin:"5px 0 0",color:"#7b857d",fontSize:10,lineHeight:1.6}}>{x.d}</p></div>)}</div></section>
+  const { connectionState, request } = useWorkspace();
+  const [packs, setPacks] = useState<PackSummary[]>([]);
+  const [selectedSlug, setSelectedSlug] = useState("");
+  const [pack, setPack] = useState<VerticalPack | null>(null);
+  const [insights, setInsights] = useState<PlaybookInsight[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [packLoading, setPackLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [packError, setPackError] = useState("");
+  const [insightError, setInsightError] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    setInsightError("");
+    const [packResult, insightResult] = await Promise.allSettled([
+      request<PackSummary[]>("/v1/packs"),
+      request<PlaybookInsight[]>("/v1/insights"),
+    ]);
+    if (packResult.status === "fulfilled") {
+      setPacks(packResult.value);
+      setSelectedSlug((current) => current && packResult.value.some((item) => item.slug === current) ? current : packResult.value[0]?.slug || "");
+    } else {
+      setPacks([]);
+      setError(packResult.reason instanceof Error ? packResult.reason.message : "Could not load vertical packs.");
+    }
+    if (insightResult.status === "fulfilled") {
+      setInsights(insightResult.value);
+    } else {
+      setInsights([]);
+      setInsightError(insightResult.reason instanceof Error ? insightResult.reason.message : "Could not load playbook insights.");
+    }
+    setLoading(false);
+  }, [request]);
+
+  useEffect(() => {
+    if (connectionState === "connected") void load();
+  }, [connectionState, load]);
+
+  useEffect(() => {
+    if (connectionState !== "connected" || !selectedSlug) {
+      setPack(null);
+      return;
+    }
+    let cancelled = false;
+    setPackLoading(true);
+    setPackError("");
+    request<VerticalPack>(`/v1/packs/${encodeURIComponent(selectedSlug)}`)
+      .then((value) => { if (!cancelled) setPack(value); })
+      .catch((reason: unknown) => {
+        if (cancelled) return;
+        setPack(null);
+        setPackError(reason instanceof Error ? reason.message : "Could not load the selected pack.");
+      })
+      .finally(() => { if (!cancelled) setPackLoading(false); });
+    return () => { cancelled = true; };
+  }, [connectionState, request, selectedSlug]);
+
+  if (connectionState === "loading") return <LoadingState label="Checking workspace connection" />;
+  if (connectionState !== "connected") return <><PageHeader eyebrow="EXPERIMENTATION / 04" title="Learning lab" description="Inspect available decision points and recorded playbook insights from your API." /><ConnectionGate /></>;
+
+  return (
+    <div className="page-stack">
+      <PageHeader
+        eyebrow="EXPERIMENTATION / 04"
+        title="Learning lab"
+        description="Explore the runtime decision configuration and evidence recorded by the reporting system. Posterior statistics are shown only when a live endpoint exposes them."
+        action={<RefreshButton onClick={() => void load()} busy={loading} />}
+      />
+
+      {error && <ErrorState title="Vertical pack registry unavailable" message={error} onRetry={() => void load()} />}
+      <div className="learning-overview-grid">
+        <MetricCard label="Available verticals" value={String(packs.length)} note="Validated packs returned by runtime registry" marker="◈" />
+        <MetricCard label="Playbook insights" value={String(insights.length)} note="Records returned by the insight endpoint" marker="⌁" />
+        <MetricCard label="Decision points" value={pack ? String(pack.decision_points?.length ?? 0) : "—"} note={pack ? `Configured in ${pack.name}` : "Select a pack to inspect its configuration"} marker="◎" emphasis />
       </div>
+
+      <section className="pack-selector-panel">
+        <div>
+          <p className="detail-label">VERTICAL CONFIGURATION</p>
+          <h2>Inspect a runtime pack</h2>
+          <p>Each pack defines funnel stages, decision points, channels, and policy metadata. The registry is read directly from the API.</p>
+        </div>
+        <label className="pack-select-label">
+          <span>Selected pack</span>
+          <select value={selectedSlug} onChange={(event) => setSelectedSlug(event.target.value)} disabled={packs.length === 0}>
+            {packs.length === 0 ? <option value="">No packs available</option> : packs.map((item) => <option key={item.slug} value={item.slug}>{item.name}</option>)}
+          </select>
+        </label>
+      </section>
+
+      {packError && <ErrorState title="Pack could not be loaded" message={packError} />}
+      {packLoading ? <LoadingState label="Loading selected vertical pack" /> : pack ? (
+        <div className="dashboard-grid learning-pack-grid">
+          <Panel title={pack.name} description={`Runtime pack · ${pack.slug} · version ${pack.version}`} action={<span className="micro-tag">FROM API</span>}>
+            <div className="detail-label">FUNNEL STAGES <span className="detail-count">{pack.funnel_stages?.length ?? 0}</span></div>
+            {!pack.funnel_stages?.length ? <EmptyState title="No stages configured" description="This pack defines no funnel stages." /> : (
+              <div className="stage-config-list">
+                {pack.funnel_stages.map((stage, index) => (
+                  <div className="stage-config" key={stage.key}>
+                    <span className="stage-config-index">{String(index + 1).padStart(2, "0")}</span>
+                    <div><strong>{String(stage.label || stage.name || humanize(stage.key))}</strong><small>{stage.key}</small></div>
+                    <code>{typeof stage.reward_weight === "number" ? `w ${stage.reward_weight}` : "Configured"}</code>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="detail-label decision-label">DECISION POINTS <span className="detail-count">{pack.decision_points?.length ?? 0}</span></div>
+            {!pack.decision_points?.length ? <EmptyState title="No decision points configured" description="This pack defines no decision points." /> : (
+              <div className="decision-list">
+                {pack.decision_points.map((point) => (
+                  <article className="decision-row" key={point.key}>
+                    <span className="decision-icon">↗</span>
+                    <div><strong>{humanize(point.key)}</strong><p>{point.description || "No description provided in this pack."}</p></div>
+                    <code>{typeof point.algorithm === "string" ? point.algorithm : "—"}</code>
+                  </article>
+                ))}
+              </div>
+            )}
+            <div className="panel-footnote">Source: <code>/v1/packs/{pack.slug}</code></div>
+          </Panel>
+
+          <div className="learning-side-stack">
+            <Panel title="Supported channels" description="Channels named by the selected pack.">
+              {!pack.channels?.length ? <EmptyState title="No channels configured" description="No channel values were returned." /> : (
+                <div className="channel-tag-list">{pack.channels.map((channel) => <span className="channel-tag" key={channel}>{humanize(channel)}</span>)}</div>
+              )}
+            </Panel>
+            <Panel title="Policy metadata" description="Configured compliance fields from pack YAML.">
+              {!pack.compliance || Object.keys(pack.compliance).length === 0 ? <EmptyState title="No compliance metadata" description="This pack does not return a compliance object." /> : (
+                <pre className="metadata-block">{asEvidence(pack.compliance)}</pre>
+              )}
+            </Panel>
+            <div className="endpoint-note">
+              <span className="endpoint-note-mark">i</span>
+              <p>Bandit posterior parameters and observation counts are not exposed by the current dashboard API. This screen does not invent conversion rates or claim a winning variant.</p>
+            </div>
+          </div>
+        </div>
+      ) : !packLoading && !error ? (
+        <EmptyState title="No vertical configuration selected" description="Once the API registry returns a pack, its stages and decision points will appear here." />
+      ) : null}
+
+      <SectionHeading title="Playbook insights" description="Stored insight records. Confidence and evidence reflect the backend record, not an independent validation." action={<span className="micro-tag">{insights.length} RECORDS</span>} />
+      {insightError && <div className="live-notice warning"><span className="notice-symbol">!</span><div>{insightError}</div></div>}
+      {insights.length === 0 && !insightError ? (
+        <Panel title="No stored insights" description="Insights are retrieved from the reporting database.">
+          <EmptyState title="Nothing recorded yet" description="Insights appear here when the backend has stored playbook_insights rows for this business." />
+        </Panel>
+      ) : (
+        <div className="insight-list">
+          {insights.map((insight) => (
+            <article className="insight-card" key={insight.id}>
+              <div className="insight-card-header">
+                <span className="insight-status">{humanize(insight.status)}</span>
+                <code>{insight.id}</code>
+              </div>
+              <h3>{insight.statement}</h3>
+              <ConfidenceValue value={insight.confidence} />
+              <details className="payload-details evidence-details">
+                <summary>Inspect evidence <span>↘</span></summary>
+                <pre>{asEvidence(insight.evidence)}</pre>
+              </details>
+              <div className="insight-meta"><span>Created {formatDate(insight.created_at)}</span><span>{insight.expires_at ? `Expires ${formatDate(insight.expires_at)}` : "No expiry recorded"}</span></div>
+            </article>
+          ))}
+        </div>
+      )}
     </div>
-    <div className="section-heading"><div><h2>Playbook candidates</h2><p>Insights must retain evidence, uncertainty, sample size and expiry.</p></div><span className="panel-kicker">2 EXAMPLES · UNVERIFIED</span></div>
-    <div style={{display:"grid",gap:11}}>{insights.map((ins,i)=><article className="insight-card" key={ins.title}><div className="insight-top"><h3>{ins.title}</h3><span className={"status-pill "+(i===0?"warn":"neutral")}>{ins.status}</span></div><p>{ins.detail}</p><div className="evidence-row">{ins.evidence.map(e=><span className="evidence-tag" key={e}>{e}</span>)}</div></article>)}</div>
-  </div>;
+  );
 }
