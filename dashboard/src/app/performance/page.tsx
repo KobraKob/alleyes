@@ -85,8 +85,8 @@ export default function PerformancePage() {
 
       <div className="metric-grid">
         <MetricCard label="Campaign records" value={number(campaigns.length)} note="Campaigns present in the reporting view" marker="↗" />
-        <MetricCard label="Spend recorded" value={formatCurrencyMinor(spendMinor, currency)} note="Sum of reported campaign spend" marker="₹" emphasis />
-        <MetricCard label="Weighted reward" value={rewardTotal.toLocaleString("en-IN", { maximumFractionDigits: 2 })} note="Sum of model reward values; not revenue" marker="Σ" />
+        <MetricCard label="Spend recorded" value={campaigns.length ? formatCurrencyMinor(spendMinor, currency) : "No data"} note="Sum of reported campaign spend" marker="₹" emphasis />
+        <MetricCard label="Weighted reward" value={campaigns.length ? rewardTotal.toLocaleString("en-IN", { maximumFractionDigits: 2 }) : "No data"} note="Sum of model reward values; not revenue" marker="Σ" />
         <MetricCard label="Best reward / rupee" value={bestRatio === null ? "No data" : `${bestRatio.toFixed(2)}×`} note="Highest value among reported campaigns" marker="⌁" />
       </div>
 
