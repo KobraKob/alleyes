@@ -19,6 +19,21 @@ class KillSwitchRequest(BaseModel):
     reason: str | None = None
 
 
+@router.get("/status")
+def get_kill_switch_status_endpoint(
+    x_business_id: str | None = Header(None, alias="X-Business-ID"),
+) -> dict[str, Any]:
+    """Returns the current global kill-switch state for the authenticated business."""
+    if not x_business_id:
+        raise HTTPException(status_code=400, detail="X-Business-ID header required.")
+
+    biz_id = UUID(x_business_id)
+    with tenant_session(biz_id) as session:
+        is_active = is_kill_switch_engaged(session, biz_id, "all")
+
+    return {"scope": "all", "engaged": is_active}
+
+
 @router.post("")
 def toggle_kill_switch_endpoint(
     req: KillSwitchRequest,
