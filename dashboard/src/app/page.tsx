@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { apiFetch, formatDate, formatDuration, formatInteger, formatCurrencyMinor, humanizeKey } from "@/lib/api";
+import { formatDate, formatDuration, formatInteger, formatCurrencyMinor, humanizeKey } from "@/lib/api";
 import { useOperationalData } from "@/lib/use-operational-data";
 import { ConnectPrompt, EmptyState, ErrorNotice, LoadingState, Metric, PageHeading, PanelHeading, SectionHeading, Surface } from "@/components/primitives";
 
