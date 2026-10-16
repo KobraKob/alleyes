@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, formatDate, humanizeKey } from "@/lib/api";
 import { useWorkspace } from "@/lib/use-workspace";
 import { ConnectPrompt, EmptyState, ErrorNotice, LoadingState, PageHeading, PanelHeading, SectionHeading, Surface } from "@/components/primitives";
