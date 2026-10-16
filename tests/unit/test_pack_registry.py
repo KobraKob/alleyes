@@ -14,14 +14,16 @@ def test_pack_registry_discovers_pack_from_disk(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    assert list_packs(tmp_path) == [{
-        "slug": "local-services",
-        "version": "1",
-        "name": "Local Services",
-        "channels": ["email", "whatsapp"],
-        "funnel_stage_count": 0,
-        "decision_point_count": 0,
-    }]
+    assert list_packs(tmp_path) == [
+        {
+            "slug": "local-services",
+            "version": "1",
+            "name": "Local Services",
+            "channels": ["email", "whatsapp"],
+            "funnel_stage_count": 0,
+            "decision_point_count": 0,
+        }
+    ]
     assert load_pack("local-services", tmp_path)["name"] == "Local Services"
 
 
@@ -29,8 +31,7 @@ def test_pack_registry_rejects_duplicate_stage_keys(tmp_path: Path) -> None:
     pack_dir = tmp_path / "gym"
     pack_dir.mkdir()
     (pack_dir / "pack.yaml").write_text(
-        "slug: gym\nversion: 1\nname: Gym\nfunnel_stages:\n"
-        "  - key: lead\n  - key: lead\n",
+        "slug: gym\nversion: 1\nname: Gym\nfunnel_stages:\n  - key: lead\n  - key: lead\n",
         encoding="utf-8",
     )
 
