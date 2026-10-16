@@ -40,11 +40,11 @@ export default function ControlPage() {
   }, [connection, business?.id]);
 
   useEffect(() => {
-    if (connection && business) void runProbes();
+    if (connection && business?.id) void runProbes();
   }, [connection, business?.id, runProbes]);
 
   const sendKillSwitch = async (engaged: boolean) => {
-    if (!connection || !business) return;
+    if (!connection || !business?.id) return;
     const confirmation = engaged
       ? "Engage the " + killScope + " kill switch? This changes backend execution controls for this business."
       : "Release the " + killScope + " kill switch? This may allow governed actions to execute again. Verify the existing halt state outside this UI first.";
