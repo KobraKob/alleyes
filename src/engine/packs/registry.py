@@ -3,6 +3,7 @@
 Packs are configuration, not executable code. They are re-read on each request so
 new/updated pack files become visible without rebuilding the application.
 """
+
 from __future__ import annotations
 
 import os
@@ -63,14 +64,16 @@ def list_packs(packs_dir: Path | None = None) -> list[dict[str, Any]]:
         if not _SLUG.fullmatch(slug):
             continue
         pack = load_pack(slug, root)
-        summaries.append({
-            "slug": slug,
-            "version": str(pack["version"]),
-            "name": pack["name"],
-            "channels": pack.get("channels", []),
-            "funnel_stage_count": len(pack.get("funnel_stages", [])),
-            "decision_point_count": len(pack.get("decision_points", [])),
-        })
+        summaries.append(
+            {
+                "slug": slug,
+                "version": str(pack["version"]),
+                "name": pack["name"],
+                "channels": pack.get("channels", []),
+                "funnel_stage_count": len(pack.get("funnel_stages", [])),
+                "decision_point_count": len(pack.get("decision_points", [])),
+            }
+        )
     return summaries
 
 
