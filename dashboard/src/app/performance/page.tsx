@@ -1,36 +1,155 @@
 "use client";
 
-const locations = [
-  { name: "Indiranagar", area: "East Bengaluru", leads: 142, trials: 68, members: 42, spend: "₹48,000", cac: "₹1,142", rpr: "3.42", rate: "29.6%" },
-  { name: "Koramangala", area: "South Bengaluru", leads: 118, trials: 52, members: 36, spend: "₹41,500", cac: "₹1,152", rpr: "3.25", rate: "30.5%" },
-  { name: "Whitefield", area: "East Bengaluru", leads: 95, trials: 40, members: 28, spend: "₹32,000", cac: "₹1,142", rpr: "3.10", rate: "29.5%" },
-];
+import { useCallback, useEffect, useState } from "react";
+import {
+  formatCurrencyMinor,
+  formatDuration,
+  humanize,
+  type Business,
+  type CampaignReport,
+  type WeeklyReport,
+} from "@/lib/api";
+import { useWorkspace } from "@/components/workspace-provider";
+import {
+  ConnectionGate,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  MetricCard,
+  PageHeader,
+  Panel,
+  RefreshButton,
+  SectionHeading,
+} from "@/components/ui";
 
-const funnel = [
-  { label: "Captured leads", value: 355, width: "100%", count: "100%" },
-  { label: "Trial booked", value: 186, width: "52.4%", count: "52.4%" },
-  { label: "Trial attended", value: 160, width: "45.1%", count: "45.1%" },
-  { label: "Paid membership", value: 106, width: "29.9%", count: "29.9%" },
-];
+const number = (value: number) => new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(value);
 
 export default function PerformancePage() {
-  return <div>
-    <div className="page-heading">
-      <div><div className="eyebrow"><span className="eyebrow-mark" /> COMMERCIAL INTELLIGENCE / 02</div><h1>Performance overview</h1><p>Follow the money from first touch to paid membership. Compare branch efficiency, funnel leakage and acquisition cost.</p></div>
-      <div className="heading-meta"><span className="period-select">OCTOBER 2026&nbsp;⌄</span></div>
+  const { connectionState, request, business: connectedBusiness } = useWorkspace();
+  const [business, setBusiness] = useState<Business | null>(connectedBusiness);
+  const [weekly, setWeekly] = useState<WeeklyReport | null>(null);
+  const [campaigns, setCampaigns] = useState<CampaignReport[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [partialErrors, setPartialErrors] = useState<string[]>([]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    const results = await Promise.allSettled([
+      request<Business>("/v1/businesses"),
+      request<WeeklyReport>("/v1/reports/weekly"),
+      request<CampaignReport[]>("/v1/reports/campaigns"),
+    ]);
+    const failed = results.filter((item) => item.status === "rejected");
+    if (failed.length === results.length) {
+      setError(failed[0].status === "rejected" && failed[0].reason instanceof Error ? failed[0].reason.message : "Reporting requests failed.");
+      setPartialErrors([]);
+      setLoading(false);
+      return;
+    }
+    setBusiness(results[0].status === "fulfilled" ? results[0].value : connectedBusiness);
+    setWeekly(results[1].status === "fulfilled" ? results[1].value : null);
+    setCampaigns(results[2].status === "fulfilled" ? results[2].value : []);
+    const names = ["Business profile", "Funnel report", "Campaign report"];
+    setPartialErrors(results.flatMap((item, index) => item.status === "rejected" ? [`${names[index]} unavailable: ${item.reason instanceof Error ? item.reason.message : "request failed"}`] : []));
+    setLoading(false);
+  }, [request, connectedBusiness]);
+
+  useEffect(() => {
+    if (connectionState === "connected") void load();
+  }, [connectionState, load]);
+
+  if (connectionState === "loading") return <LoadingState label="Checking workspace connection" />;
+  if (connectionState !== "connected") return <><PageHeader eyebrow="COMMERCIAL / 03" title="Performance" description="Campaign outcomes and funnel movement from actual business records." /><ConnectionGate /></>;
+  if (error) return <><PageHeader eyebrow="COMMERCIAL / 03" title="Performance" description="Campaign outcomes and funnel movement from actual business records." action={<RefreshButton onClick={() => void load()} busy={loading} />} /><ErrorState title="Reporting unavailable" message={error} onRetry={() => void load()} /></>;
+
+  const currency = business?.currency || "INR";
+  const spendMinor = campaigns.reduce((sum, campaign) => sum + campaign.spend_minor, 0);
+  const rewardTotal = campaigns.reduce((sum, campaign) => sum + campaign.reward, 0);
+  const bestRatio = campaigns.reduce<number | null>((best, campaign) => best === null || campaign.reward_per_rupee > best ? campaign.reward_per_rupee : best, null);
+  const funnelRows = Object.entries(weekly?.funnel ?? {});
+  const maxFunnel = Math.max(1, ...funnelRows.map(([, value]) => value));
+  const sortedCampaigns = [...campaigns].sort((a, b) => b.reward_per_rupee - a.reward_per_rupee);
+
+  return (
+    <div className="page-stack">
+      <PageHeader
+        eyebrow="COMMERCIAL / 03"
+        title="Performance"
+        description="Spend, reward, and stage movement from the reporting API. Weighted reward is a model outcome, not booked revenue."
+        action={<RefreshButton onClick={() => void load()} busy={loading} />}
+      />
+
+      {partialErrors.map((item) => <div className="live-notice warning" key={item}><span className="notice-symbol">!</span><div>{item}</div></div>)}
+
+      <div className="metric-grid">
+        <MetricCard label="Campaign records" value={number(campaigns.length)} note="Campaigns present in the reporting view" marker="↗" />
+        <MetricCard label="Spend recorded" value={formatCurrencyMinor(spendMinor, currency)} note="Sum of reported campaign spend" marker="₹" emphasis />
+        <MetricCard label="Weighted reward" value={rewardTotal.toLocaleString("en-IN", { maximumFractionDigits: 2 })} note="Sum of model reward values; not revenue" marker="Σ" />
+        <MetricCard label="Best reward / rupee" value={bestRatio === null ? "No data" : `${bestRatio.toFixed(2)}×`} note="Highest value among reported campaigns" marker="⌁" />
+      </div>
+
+      <div className="dashboard-grid performance-grid">
+        <Panel title="Funnel movement" description="Stage counts returned by the business funnel report." action={<span className="micro-tag">WEEKLY REPORT</span>}>
+          {weekly === null ? (
+            <EmptyState title="Funnel data unavailable" description="The reporting endpoint did not return funnel counts for this refresh." />
+          ) : funnelRows.length === 0 ? (
+            <EmptyState title="No funnel counts recorded" description="Ingest conversion events and configure funnel stages to populate this report." />
+          ) : (
+            <>
+              <div className="funnel-list funnel-list-performance">
+                {funnelRows.map(([key, value], index) => (
+                  <div className="funnel-item" key={key}>
+                    <div className="funnel-line"><span className="funnel-index">{String(index + 1).padStart(2, "0")}</span><strong>{humanize(key)}</strong><b>{number(value)}</b></div>
+                    <div className="funnel-track"><span style={{ width: `${Math.max(value > 0 ? 2 : 0, value / maxFunnel * 100)}%` }} /></div>
+                  </div>
+                ))}
+              </div>
+              <p className="footnote">Bars are normalized to the largest returned stage count. Counts are shown independently and are not summed.</p>
+            </>
+          )}
+        </Panel>
+        <Panel title="Response speed" description="Mean first-response time from recorded conversations.">
+          <div className="response-speed">
+            <span className="response-speed-mark" aria-hidden="true">◷</span>
+            <strong>{formatDuration(weekly?.avg_first_response_seconds)}</strong>
+            <p>{weekly && weekly.avg_first_response_seconds > 0
+              ? `Average across conversations included by the reporting query.`
+              : "No response duration has been recorded in the reporting view."}</p>
+          </div>
+          <div className="detail-pair"><span>Business timezone</span><strong>{business?.timezone || "Not configured"}</strong></div>
+          <div className="detail-pair"><span>Report endpoint</span><code>/v1/reports/weekly</code></div>
+        </Panel>
+      </div>
+
+      <SectionHeading title="Campaign economics" description="Actual rows from the campaign reward-per-rupee view." action={<span className="micro-tag">{campaigns.length} RECORDS</span>} />
+      <section className="panel">
+        {campaigns.length === 0 ? (
+          <EmptyState title="No campaign economics to show" description="This table appears when the reporting view has campaign reward and spend records." />
+        ) : (
+          <div className="table-scroller">
+            <table className="data-table">
+              <thead><tr><th>Campaign</th><th>Spend</th><th>Reward</th><th>Reward / rupee</th><th>Relative efficiency</th></tr></thead>
+              <tbody>
+                {sortedCampaigns.map((campaign) => {
+                  const maxRatio = Math.max(0.0001, ...campaigns.map((item) => item.reward_per_rupee));
+                  return (
+                    <tr key={campaign.campaign_id}>
+                      <td><strong className="table-primary">{campaign.name}</strong><small className="table-secondary">{campaign.campaign_id}</small></td>
+                      <td>{formatCurrencyMinor(campaign.spend_minor, currency)}</td>
+                      <td>{campaign.reward.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</td>
+                      <td><strong className="ratio-value">{campaign.reward_per_rupee.toFixed(2)}×</strong></td>
+                      <td><div className="table-bar"><span style={{ width: `${Math.max(campaign.reward_per_rupee > 0 ? 2 : 0, campaign.reward_per_rupee / maxRatio * 100)}%` }} /></div></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+      <div className="footnote footnote-bottom">Reward is configured by ALLEYES and can combine multiple funnel events. It should not be interpreted as currency or revenue unless your reward definition explicitly makes it so.</div>
     </div>
-    <div className="demo-notice"><span className="notice-icon">i</span><span><strong>Illustrative workspace data.</strong> These values are sample figures for interface review, not live campaign results. Connect the reporting API before using them for business decisions.</span></div>
-    <div className="metric-grid">
-      <div className="metric-card"><div className="metric-label">New members</div><div className="metric-value">106<span style={{fontSize:13,color:"#879188",letterSpacing:0}}> / 120</span></div><div className="metric-foot"><span>Monthly objective</span><span className="delta">88.3% reached</span></div><div className="metric-rule"><span style={{width:"88.3%"}} /></div></div>
-      <div className="metric-card"><div className="metric-label">Blended acquisition cost</div><div className="metric-value">₹1,146</div><div className="metric-foot"><span>Ceiling ₹1,500</span><span className="delta">23.6% under</span></div><div className="metric-rule"><span style={{width:"76.4%"}} /></div></div>
-      <div className="metric-card"><div className="metric-label">Media spend</div><div className="metric-value">₹1.21L</div><div className="metric-foot"><span>Budget ₹1.80L</span><span className="delta neutral">67.5% used</span></div><div className="metric-rule"><span style={{width:"67.5%"}} /></div></div>
-      <div className="metric-card"><div className="metric-label">Reward / rupee</div><div className="metric-value">3.28<span style={{fontSize:13,color:"#879188"}}>×</span></div><div className="metric-foot"><span>Retention-weighted proxy</span><span className="delta neutral">Sample metric</span></div><div className="metric-rule"><span style={{width:"72%"}} /></div></div>
-    </div>
-    <div className="content-grid">
-      <section className="panel"><div className="panel-header"><div><h2 className="panel-title">Conversion funnel</h2><p className="panel-subtitle">Lead-to-member progression across all demo branches</p></div><span className="panel-kicker">MONTH TO DATE</span></div><div className="panel-body"><div className="bar-list">{funnel.map((item,i)=><div className="bar-row" key={item.label}><div className="bar-meta"><strong>{item.label}</strong><span>{item.value.toLocaleString("en-IN")} <span style={{color:"#a0a8a0"}}>· {item.count}</span></span></div><div className="bar-track"><div className={"bar-fill "+(i===3?"dark":"")} style={{width:item.width}} /></div></div>)}</div><div style={{marginTop:20,paddingTop:14,borderTop:"1px solid #edf0ea",display:"flex",justifyContent:"space-between",gap:12,fontSize:10,color:"#778278"}}><span>Biggest drop-off: captured lead → trial booked</span><strong style={{color:"#a66a20"}}>47.6% leakage</strong></div></div></section>
-      <section className="panel"><div className="panel-header"><div><h2 className="panel-title">Objective status</h2><p className="panel-subtitle">Progress against the operating brief</p></div><span className="status-pill">On track</span></div><div className="panel-body"><div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:12}}><span style={{fontSize:11,color:"#727d74"}}>Membership target</span><strong style={{fontSize:24,letterSpacing:-1}}>106 <span style={{fontSize:11,color:"#7d877f",letterSpacing:0}}>/ 120</span></strong></div><div className="metric-rule" style={{height:7,marginTop:13}}><span style={{width:"88.3%"}} /></div><div style={{display:"flex",justifyContent:"space-between",marginTop:8,color:"#7b857d",fontSize:10}}><span>88.3% achieved</span><span>14 remaining</span></div><div style={{marginTop:23,paddingTop:17,borderTop:"1px solid #edf0ea"}}><div className="bar-meta"><strong>CAC ceiling</strong><span>₹1,146 / ₹1,500</span></div><div className="metric-rule" style={{height:7,marginTop:10}}><span style={{width:"76.4%",background:"#6f8a6a"}} /></div><p style={{margin:"9px 0 0",color:"#6d786e",fontSize:10,lineHeight:1.6}}>Current sample CAC sits below the stated ceiling. Validate spend and membership attribution before acting.</p></div></div></section>
-    </div>
-    <div className="section-heading"><div><h2>Branch economics</h2><p>Compare lead volume, trial conversion and acquisition cost.</p></div><span className="panel-kicker">3 LOCATIONS · SAMPLE</span></div>
-    <section className="panel"><div className="data-table-wrap"><table><thead><tr><th>Branch</th><th>Leads</th><th>Trials attended</th><th>Members</th><th>Trial → member</th><th>Spend</th><th>CAC</th><th>Reward / ₹</th></tr></thead><tbody>{locations.map((loc)=><tr key={loc.name}><td><span className="cell-primary">{loc.name}</span><br/><span className="cell-muted">{loc.area}</span></td><td>{loc.leads}</td><td>{loc.trials}</td><td className="table-number">{loc.members}</td><td>{loc.rate}</td><td>{loc.spend}</td><td className="table-number">{loc.cac}</td><td><span className="status-pill">{loc.rpr}×</span></td></tr>)}</tbody></table></div></section>
-  </div>;
+  );
 }
