@@ -84,7 +84,7 @@ export function useOperationalData() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!connection || !business) return;
+    if (!connection || !business?.id) return;
     setLoading(true);
     const jobs: Array<Promise<EndpointResult>> = [
       apiFetch<WeeklyReport>("/v1/reports/weekly", {}, connection)
@@ -151,7 +151,7 @@ export function useOperationalData() {
   }, [connection, business]);
 
   useEffect(() => {
-    if (!connection || !business) return;
+    if (!connection || !business?.id) return;
     void refresh();
     const timer = window.setInterval(() => { void refresh(); }, 30_000);
     return () => window.clearInterval(timer);
