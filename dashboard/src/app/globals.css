@@ -274,7 +274,7 @@ code, pre, .monospace { font-family: "SFMono-Regular", Consolas, "Liberation Mon
   position: relative; overflow: hidden; min-height: 365px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
   padding: 40px clamp(22px, 5vw, 62px); border: 1px solid #101810; background: var(--deep); color: #f3f5ec;
 }
-.connection-gate:after { position: absolute; top: 0; right: 0; width: 22%; height: 100%; border-left: 1px solid #293527; background: repeating-linear-gradient(90deg, transparent 0, transparent 24px, rgba(178,205,142,.06) 25px); content: ""; pointer-events: none; }
+.connection-gate:after { position: absolute; top: 0; right: 0; width: 22%; height: 100%; border-left: 1px solid #293527; background: #172118; content: ""; pointer-events: none; }
 .gate-index { color: #96a38d; font-family: monospace; font-size: 9px; letter-spacing: 1.5px; }
 .gate-rule { width: 36px; height: 3px; margin-top: 16px; background: var(--acid); }
 .connection-gate h2 { margin: 24px 0 0; font-size: clamp(31px, 4.5vw, 49px); font-weight: 740; letter-spacing: -2.4px; line-height: 1.06; }
