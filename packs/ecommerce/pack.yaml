@@ -1,0 +1,52 @@
+slug: ecommerce
+version: 1
+name: "E-commerce & DTC"
+funnel_stages:
+  - key: lead
+    label: "Subscriber / Lead"
+    ordinal: 1
+    reward_weight: 0.5
+    is_revenue_stage: false
+    expected_lag_days: 0
+  - key: product_view
+    label: "Product Viewed"
+    ordinal: 2
+    reward_weight: 1.0
+    is_revenue_stage: false
+    expected_lag_days: 0
+  - key: checkout_started
+    label: "Checkout Started"
+    ordinal: 3
+    reward_weight: 3.0
+    is_revenue_stage: false
+    expected_lag_days: 1
+  - key: purchase
+    label: "Purchase"
+    ordinal: 4
+    reward_weight: 10.0
+    is_revenue_stage: true
+    expected_lag_days: 2
+  - key: repeat_purchase
+    label: "Repeat Purchase"
+    ordinal: 5
+    reward_weight: 20.0
+    is_revenue_stage: true
+    expected_lag_days: 30
+decision_points:
+  - key: creative
+    description: "Ad creative and product angle"
+    algorithm: thompson_beta
+    reward_window_days: 14
+  - key: offer
+    description: "Discount, bundle, or no-incentive offer"
+    algorithm: thompson_beta
+    reward_window_days: 14
+  - key: landing_page
+    description: "Landing page variant"
+    algorithm: thompson_beta
+    reward_window_days: 14
+channels: [meta_ads, google_ads, email, whatsapp, sms]
+compliance:
+  whatsapp_requires_opt_in: true
+  respect_suppression_lists: true
+seed_priors: {}
