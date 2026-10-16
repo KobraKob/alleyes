@@ -62,7 +62,7 @@ export default function PerformancePage() {
 
       <SectionHeading title="Campaign economics" description="Reward and spend from the database view, scoped to this business." trailing={<span className="panel-kicker">NO SYNTHETIC METRICS</span>} />
       <Surface>
-        {loading && !data.campaigns ? <div className="surface-body"><LoadingState /></div> : data.campaigns?.length ? <div className="table-wrap"><table className="data-table"><thead><tr><th>Campaign</th><th>Reward</th><th>Spend</th><th>Reward / ₹1</th></tr></thead><tbody>
+        {loading && !data.campaigns ? <div className="surface-body"><LoadingState /></div> : data.campaigns?.length ? <div className="table-wrap"><table className="data-table"><thead><tr><th>Campaign</th><th>Reward</th><th>Spend</th><th>Reward / currency unit</th></tr></thead><tbody>
           {data.campaigns.map((campaign) => <tr key={campaign.campaign_id}>
             <td><span className="cell-main">{campaign.name || "Unnamed campaign"}</span><span className="cell-secondary">{campaign.campaign_id}</span></td>
             <td className="number-cell">{Number.isFinite(campaign.reward) ? campaign.reward.toLocaleString("en-IN", { maximumFractionDigits: 2 }) : "Not recorded"}</td>
