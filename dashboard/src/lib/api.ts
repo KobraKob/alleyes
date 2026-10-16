@@ -168,7 +168,7 @@ export function formatCurrencyMinor(amountMinor: number, currency = "INR"): stri
 
 export function formatDuration(seconds: number | null | undefined): string {
   if (seconds === null || seconds === undefined || !Number.isFinite(seconds) || seconds <= 0) {
-    return "No recorded response time";
+    return "No data";
   }
   if (seconds < 60) return `${Math.round(seconds)} sec`;
   const minutes = Math.round(seconds / 60);
