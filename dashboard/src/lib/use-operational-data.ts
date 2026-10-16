@@ -109,16 +109,34 @@ export function useOperationalData() {
 
     const results = await Promise.all(jobs);
     const nextErrors: Record<string, string> = {};
-    setData((previous) => {
-      const next = { ...previous };
-      for (const result of results) {
-        if (result.error) nextErrors[result.key] = result.error;
-        else if (result.data !== undefined) {
-          (next as Record<keyof DataState, unknown>)[result.key] = result.data;
-        }
+    const updates: Partial<DataState> = {};
+    for (const result of results) {
+      if (result.error) {
+        nextErrors[result.key] = result.error;
+        continue;
       }
-      return next;
-    });
+      switch (result.key) {
+        case "weekly":
+          updates.weekly = result.data as WeeklyReport;
+          break;
+        case "campaigns":
+          updates.campaigns = result.data as CampaignReport[];
+          break;
+        case "objectives":
+          updates.objectives = result.data as Objective[];
+          break;
+        case "locations":
+          updates.locations = result.data as Location[];
+          break;
+        case "insights":
+          updates.insights = result.data as Insight[];
+          break;
+        case "packs":
+          updates.packs = result.data as PackSummary[];
+          break;
+      }
+    }
+    setData((previous) => ({ ...previous, ...updates }));
     setErrors(nextErrors);
     setLastUpdated(new Date().toISOString());
     setLoading(false);
