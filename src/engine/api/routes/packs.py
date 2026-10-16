@@ -1,4 +1,5 @@
 """Read-only API for runtime-discovered vertical packs."""
+
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
