@@ -113,6 +113,14 @@ export function useOperationalData() {
     for (const result of results) {
       if (result.error) {
         nextErrors[result.key] = result.error;
+        switch (result.key) {
+          case "weekly": updates.weekly = null; break;
+          case "campaigns": updates.campaigns = null; break;
+          case "objectives": updates.objectives = null; break;
+          case "locations": updates.locations = null; break;
+          case "insights": updates.insights = null; break;
+          case "packs": updates.packs = null; break;
+        }
         continue;
       }
       switch (result.key) {
