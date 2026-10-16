@@ -45,8 +45,12 @@ def tenant_session(business_id: Any | None = None) -> Generator[Session, None, N
     session: Session = AppSessionLocal()
     try:
         session.begin()
-        # Set local variable for the transaction scope
-        session.execute(text("SET LOCAL app.business_id = :biz_id"), {"biz_id": biz_uuid_str})
+        # SET LOCAL does not support bind parameters in PostgreSQL. set_config with
+        # is_local=true has the same transaction-local scope and safely binds the UUID.
+        session.execute(
+            text("SELECT set_config('app.business_id', :biz_id, true)"),
+            {"biz_id": biz_uuid_str},
+        )
         yield session
         session.commit()
     except Exception:
