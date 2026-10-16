@@ -158,6 +158,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { connectionState, connectionMessage, business } = useWorkspace();
   const [connectionOpen, setConnectionOpen] = useState(false);
+  useEffect(() => {
+    const openConnection = () => setConnectionOpen(true);
+    window.addEventListener("alleeyes:open-connection", openConnection);
+    return () => window.removeEventListener("alleeyes:open-connection", openConnection);
+  }, []);
+
   const currentPage = navigation.find((item) => item.href === pathname) ?? navigation[0];
   const linked = connectionState === "connected";
 
