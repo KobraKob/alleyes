@@ -54,7 +54,35 @@ jobs:
           PII_ENCRYPTION_KEY: vS8zC8rVl71Dk6fQWk3Xz9J2gN7tVb6uY4eO1pP8lDs=
           TENANT_HMAC_MASTER_KEY: kL9mB7xP2wQ4vC8nZ1tY6rJ3gH5eD0fA=
         run: |
+          # This CI database is disposable. Provision test-only roles explicitly;
+          # production credentials and role management remain an operator concern.
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          DO $
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user') THEN
+              EXECUTE 'CREATE ROLE app_user LOGIN PASSWORD ''app_secret''';
+            ELSE
+              EXECUTE 'ALTER ROLE app_user WITH LOGIN PASSWORD ''app_secret''';
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'learning_svc') THEN
+              EXECUTE 'CREATE ROLE learning_svc LOGIN PASSWORD ''learning_secret'' BYPASSRLS';
+            ELSE
+              EXECUTE 'ALTER ROLE learning_svc WITH LOGIN PASSWORD ''learning_secret'' BYPASSRLS';
+            END IF;
+          END $;
+          GRANT CONNECT ON DATABASE marketing_engine TO app_user, learning_svc;
+          GRANT USAGE ON SCHEMA public TO app_user, learning_svc;
+          SQL
+
           alembic upgrade head
+
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user;
+          GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO app_user;
+          GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO app_user;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE priors TO learning_svc;
+          SQL
+
           python scripts/seed.py
 
       - name: Set up Node.js
